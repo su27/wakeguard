@@ -1,0 +1,140 @@
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util">
+  <Package Name="WakeGuard"
+           Manufacturer="WakeGuard contributors"
+           Version="$(var.ProductVersion)"
+           UpgradeCode="{9FCE82B6-33B0-4399-9827-D766A1C906A4}"
+           Scope="perMachine"
+           InstallerVersion="500"
+           Language="2052"
+           Codepage="936">
+    <SummaryInformation Description="WakeGuard installer" Manufacturer="WakeGuard contributors" />
+    <MajorUpgrade DowngradeErrorMessage="A newer version of WakeGuard is already installed." />
+    <MediaTemplate EmbedCab="yes" CompressionLevel="$(var.InstallerCompression)" />
+
+    <Icon Id="WakeGuardIcon" SourceFile="$(var.SourceRoot)\src\WakeGuard.Tray\Assets\WakeGuard.ico" />
+    <Property Id="ARPPRODUCTICON" Value="WakeGuardIcon" />
+    <SetProperty Id="ARPINSTALLLOCATION" Value="[INSTALLFOLDER]" After="CostFinalize" Sequence="both" />
+
+    <util:CloseApplication Id="CloseWakeGuardTray"
+                           Target="WakeGuard.Tray.exe"
+                           CloseMessage="yes"
+                           ElevatedCloseMessage="yes"
+                           RebootPrompt="no"
+                           Timeout="5"
+                           TerminateProcess="0" />
+
+    <StandardDirectory Id="ProgramFiles6432Folder">
+      <Directory Id="INSTALLFOLDER" Name="WakeGuard">
+        <Directory Id="TRAYFOLDER" Name="Tray" />
+        <Directory Id="SERVICEFOLDER" Name="Service" />
+      </Directory>
+    </StandardDirectory>
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Directory Id="WakeGuardProgramsFolder" Name="WakeGuard" />
+    </StandardDirectory>
+    <StandardDirectory Id="CommonAppDataFolder">
+      <Directory Id="WakeGuardDataFolder" Name="WakeGuard" />
+    </StandardDirectory>
+
+    <Feature Id="MainFeature" Title="WakeGuard" Level="1">
+      <ComponentRef Id="TrayExecutableComponent" />
+      <ComponentRef Id="ServiceExecutableComponent" />
+      <ComponentRef Id="StartMenuShortcutComponent" />
+      <ComponentRef Id="ProgramDataComponent" />
+    </Feature>
+  </Package>
+
+  <Fragment>
+    <DirectoryRef Id="TRAYFOLDER">
+      <Component Id="TrayExecutableComponent"
+                 Guid="{DBA19C54-1E1E-4EC5-88FB-DC93DBAD71B7}"
+                 Bitness="always64">
+        <File Id="TrayExecutable"
+              Source="$(var.TrayPublishDir)\WakeGuard.Tray.exe"
+              KeyPath="yes" />
+        <RegistryValue Root="HKLM"
+                       Key="Software\Microsoft\Windows\CurrentVersion\Run"
+                       Name="WakeGuard"
+                       Type="string"
+                       Value="&quot;[#TrayExecutable]&quot;" />
+      </Component>
+    </DirectoryRef>
+  </Fragment>
+
+  <Fragment>
+    <DirectoryRef Id="WakeGuardProgramsFolder">
+      <Component Id="StartMenuShortcutComponent"
+                 Guid="{D5E67DBE-7FAF-45F0-B277-61605B9C208D}"
+                 Bitness="always64">
+        <Shortcut Id="WakeGuardStartMenuShortcut"
+                  Name="WakeGuard"
+                  Description="保持 Windows 唤醒"
+                  Target="[TRAYFOLDER]WakeGuard.Tray.exe"
+                  WorkingDirectory="TRAYFOLDER"
+                  Icon="WakeGuardIcon" />
+        <RemoveFolder Id="RemoveWakeGuardProgramsFolder"
+                      Directory="WakeGuardProgramsFolder"
+                      On="uninstall" />
+        <RegistryValue Root="HKCU"
+                       Key="Software\WakeGuard"
+                       Name="StartMenuShortcut"
+                       Type="integer"
+                       Value="1"
+                       KeyPath="yes" />
+      </Component>
+    </DirectoryRef>
+  </Fragment>
+
+  <Fragment>
+    <DirectoryRef Id="SERVICEFOLDER">
+      <Component Id="ServiceExecutableComponent"
+                 Guid="{DF84B89B-47E8-491A-96FC-4C56F39B463D}"
+                 Bitness="always64">
+        <File Id="ServiceExecutable"
+              Source="$(var.ServicePublishDir)\WakeGuard.Service.exe"
+              KeyPath="yes" />
+        <ServiceInstall Id="WakeGuardServiceInstall"
+                        Name="WakeGuard"
+                        DisplayName="WakeGuard 后台唤醒服务"
+                        Description="锁屏和显示器关闭后仍维护 Windows 系统级唤醒请求。"
+                        Type="ownProcess"
+                        Start="auto"
+                        ErrorControl="normal"
+                        Account="NT AUTHORITY\LocalService"
+                        Vital="yes">
+          <util:ServiceConfig FirstFailureActionType="restart"
+                              SecondFailureActionType="restart"
+                              ThirdFailureActionType="none"
+                              RestartServiceDelayInSeconds="5"
+                              ResetPeriodInDays="1" />
+        </ServiceInstall>
+        <ServiceControl Id="WakeGuardServiceControl"
+                        Name="WakeGuard"
+                        Start="install"
+                        Stop="both"
+                        Remove="uninstall"
+                        Wait="yes" />
+      </Component>
+    </DirectoryRef>
+  </Fragment>
+
+  <Fragment>
+    <DirectoryRef Id="WakeGuardDataFolder">
+      <Component Id="ProgramDataComponent"
+                 Guid="{FA76CD08-397B-41CE-AC5A-A2F89C223A0D}"
+                 Bitness="always64">
+        <CreateFolder>
+          <util:PermissionEx User="NT AUTHORITY\LOCAL SERVICE" GenericAll="yes" />
+          <util:PermissionEx User="BUILTIN\Users" GenericRead="yes" GenericExecute="yes" />
+        </CreateFolder>
+        <RegistryValue Root="HKLM"
+                       Key="Software\WakeGuard"
+                       Name="ProgramData"
+                       Type="integer"
+                       Value="1"
+                       KeyPath="yes" />
+      </Component>
+    </DirectoryRef>
+  </Fragment>
+</Wix>

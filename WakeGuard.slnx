@@ -1,0 +1,16 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/WakeGuard.Contracts/WakeGuard.Contracts.csproj" />
+    <Project Path="src/WakeGuard.Core/WakeGuard.Core.csproj" />
+    <Project Path="src/WakeGuard.Service/WakeGuard.Service.csproj" />
+    <Project Path="src/WakeGuard.Tray/WakeGuard.Tray.csproj" />
+    <Project Path="src/WakeGuard.Windows/WakeGuard.Windows.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/WakeGuard.Core.Tests/WakeGuard.Core.Tests.csproj" />
+    <Project Path="tests/WakeGuard.Windows.Tests/WakeGuard.Windows.Tests.csproj" />
+  </Folder>
+  <Folder Name="/tools/">
+    <Project Path="tools/WakeGuard.IconGenerator/WakeGuard.IconGenerator.csproj" />
+  </Folder>
+</Solution>

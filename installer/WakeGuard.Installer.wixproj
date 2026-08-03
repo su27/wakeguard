@@ -1,0 +1,21 @@
+<Project Sdk="WixToolset.Sdk/5.0.2">
+  <PropertyGroup>
+    <Platform>x64</Platform>
+    <OutputType>Package</OutputType>
+    <OutputName>WakeGuard-$(Version)-win-x64</OutputName>
+    <InstallerCompression Condition="'$(InstallerCompression)' == ''">medium</InstallerCompression>
+    <OutputPath>$(MSBuildThisFileDirectory)..\artifacts\installer\</OutputPath>
+    <TrayPublishDir>$(MSBuildThisFileDirectory)..\artifacts\publish\win-x64\Tray</TrayPublishDir>
+    <ServicePublishDir>$(MSBuildThisFileDirectory)..\artifacts\publish\win-x64\Service</ServicePublishDir>
+    <DefineConstants>TrayPublishDir=$(TrayPublishDir);ServicePublishDir=$(ServicePublishDir);SourceRoot=$(MSBuildThisFileDirectory)..;InstallerCompression=$(InstallerCompression);ProductVersion=$(Version)</DefineConstants>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="WixToolset.Util.wixext" />
+  </ItemGroup>
+  <Target Name="EnsurePublishedApplications" BeforeTargets="Compile">
+    <Error Condition="!Exists('$(TrayPublishDir)\WakeGuard.Tray.exe')"
+           Text="Tray publish output is missing. Publish WakeGuard.Tray with the win-x64 profile first." />
+    <Error Condition="!Exists('$(ServicePublishDir)\WakeGuard.Service.exe')"
+           Text="Service publish output is missing. Publish WakeGuard.Service with the win-x64 profile first." />
+  </Target>
+</Project>
