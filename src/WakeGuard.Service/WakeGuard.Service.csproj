@@ -16,4 +16,7 @@
   <ItemGroup>
     <PackageReference Include="System.ServiceProcess.ServiceController" />
   </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="WakeGuard.Windows.Tests" />
+  </ItemGroup>
 </Project>

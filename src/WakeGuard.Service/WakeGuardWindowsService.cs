@@ -13,18 +13,33 @@ internal sealed class WakeGuardWindowsService : ServiceBase
     internal const string ServiceNameValue = "WakeGuard";
 
     private readonly ConcurrentDictionary<Guid, Task> _connections = [];
+    private readonly object _lifecycleSync = new();
     private readonly SemaphoreSlim _leaseScheduleChanged = new(0, 1);
     private readonly string _pipeName;
+    private readonly Action? _idleStopRequested;
+    private readonly TimeSpan _idleTimeout;
     private CancellationTokenSource? _shutdown;
     private WindowsSystemPowerRequestSink? _powerRequestSink;
     private LeaseCoordinator? _coordinator;
     private Task? _acceptTask;
     private Task? _sweepTask;
+    private int _activeConnectionCount;
     private int _lastLoggedMode = (int)WakeMode.Inactive;
+    private bool _stoppingForIdle;
 
-    internal WakeGuardWindowsService(string? pipeName = null)
+    internal WakeGuardWindowsService(
+        string? pipeName = null,
+        Action? idleStopRequested = null,
+        TimeSpan? idleTimeout = null)
     {
         _pipeName = pipeName ?? ProtocolConstants.PipeName;
+        _idleStopRequested = idleStopRequested;
+        _idleTimeout = idleTimeout ?? ProtocolConstants.ServiceIdleTimeout;
+        if (_idleTimeout <= TimeSpan.Zero)
+        {
+            throw new ArgumentOutOfRangeException(nameof(idleTimeout));
+        }
+
         ServiceName = ServiceNameValue;
         CanStop = true;
         CanShutdown = true;
@@ -56,6 +71,7 @@ internal sealed class WakeGuardWindowsService : ServiceBase
 
         _shutdown = new CancellationTokenSource();
         _lastLoggedMode = (int)WakeMode.Inactive;
+        _stoppingForIdle = false;
         _powerRequestSink = new WindowsSystemPowerRequestSink();
         _coordinator = new LeaseCoordinator(_powerRequestSink);
         _acceptTask = AcceptConnectionsAsync(_shutdown.Token);
@@ -118,11 +134,17 @@ internal sealed class WakeGuardWindowsService : ServiceBase
                 pipe = SecurePipeFactory.CreateServer(_pipeName);
                 await pipe.WaitForConnectionAsync(cancellationToken).ConfigureAwait(false);
                 var connectionId = Guid.NewGuid();
+                Interlocked.Increment(ref _activeConnectionCount);
                 var connectionTask = HandleConnectionAsync(pipe, cancellationToken);
                 pipe = null;
                 _connections[connectionId] = connectionTask;
                 _ = connectionTask.ContinueWith(
-                    completedTask => _connections.TryRemove(connectionId, out _),
+                    completedTask =>
+                    {
+                        _connections.TryRemove(connectionId, out _);
+                        Interlocked.Decrement(ref _activeConnectionCount);
+                        SignalLeaseScheduleChanged();
+                    },
                     CancellationToken.None,
                     TaskContinuationOptions.ExecuteSynchronously,
                     TaskScheduler.Default);
@@ -194,31 +216,39 @@ internal sealed class WakeGuardWindowsService : ServiceBase
             return ErrorResponse("invalid_client", "Client identifier is empty.");
         }
 
-        try
+        lock (_lifecycleSync)
         {
-            var coordinator = _coordinator ?? throw new InvalidOperationException("Service is stopping.");
-            var snapshot = request.Kind switch
+            if (_stoppingForIdle)
             {
-                RequestKind.QueryStatus => coordinator.GetSnapshot(userSid, request.ClientId),
-                RequestKind.UpsertLease => coordinator.UpsertLease(
-                    userSid,
-                    request.ClientId,
-                    request.RequestedMode,
-                    request.StopAtUtc?.ToUniversalTime()),
-                RequestKind.ReleaseLease => coordinator.ReleaseLease(userSid, request.ClientId),
-                _ => throw new InvalidOperationException($"Unknown request kind: {request.Kind}."),
-            };
+                return ErrorResponse("service_stopping", "The service is stopping after an idle period.");
+            }
 
-            SignalLeaseScheduleChanged();
-            LogEffectiveModeChange(snapshot.EffectiveMode);
-            return SuccessResponse(snapshot);
-        }
-        catch (Exception exception)
-        {
-            ServiceLog.Error(
-                $"Request {request.Kind} from SID {userSid}, session {request.SessionId}, process {request.ProcessId} failed.",
-                exception);
-            return ErrorResponse("operation_failed", exception.Message);
+            try
+            {
+                var coordinator = _coordinator ?? throw new InvalidOperationException("Service is stopping.");
+                var snapshot = request.Kind switch
+                {
+                    RequestKind.QueryStatus => coordinator.GetSnapshot(userSid, request.ClientId),
+                    RequestKind.UpsertLease => coordinator.UpsertLease(
+                        userSid,
+                        request.ClientId,
+                        request.RequestedMode,
+                        request.StopAtUtc?.ToUniversalTime()),
+                    RequestKind.ReleaseLease => coordinator.ReleaseLease(userSid, request.ClientId),
+                    _ => throw new InvalidOperationException($"Unknown request kind: {request.Kind}."),
+                };
+
+                SignalLeaseScheduleChanged();
+                LogEffectiveModeChange(snapshot.EffectiveMode);
+                return SuccessResponse(snapshot);
+            }
+            catch (Exception exception)
+            {
+                ServiceLog.Error(
+                    $"Request {request.Kind} from SID {userSid}, session {request.SessionId}, process {request.ProcessId} failed.",
+                    exception);
+                return ErrorResponse("operation_failed", exception.Message);
+            }
         }
     }
 
@@ -237,7 +267,19 @@ internal sealed class WakeGuardWindowsService : ServiceBase
                 var nextExpirationUtc = coordinator.GetNextExpirationUtc();
                 if (nextExpirationUtc is null)
                 {
-                    await _leaseScheduleChanged.WaitAsync(cancellationToken).ConfigureAwait(false);
+                    if (await _leaseScheduleChanged
+                            .WaitAsync(_idleTimeout, cancellationToken)
+                            .ConfigureAwait(false))
+                    {
+                        continue;
+                    }
+
+                    if (TryBeginIdleShutdown())
+                    {
+                        ServiceLog.Information("WakeGuard service is stopping after an idle period.");
+                        QueueIdleStop();
+                        return;
+                    }
                     continue;
                 }
 
@@ -261,6 +303,47 @@ internal sealed class WakeGuardWindowsService : ServiceBase
             ServiceLog.Error("Lease sweep loop failed.", exception);
             throw;
         }
+    }
+
+    private bool TryBeginIdleShutdown()
+    {
+        lock (_lifecycleSync)
+        {
+            if (_stoppingForIdle || Volatile.Read(ref _activeConnectionCount) != 0)
+            {
+                return false;
+            }
+
+            var coordinator = _coordinator;
+            if (coordinator is null || coordinator.GetNextExpirationUtc() is not null)
+            {
+                return false;
+            }
+
+            _stoppingForIdle = true;
+            return true;
+        }
+    }
+
+    private void QueueIdleStop()
+    {
+        if (_idleStopRequested is not null)
+        {
+            _idleStopRequested();
+            return;
+        }
+
+        _ = Task.Run(() =>
+        {
+            try
+            {
+                Stop();
+            }
+            catch (Exception exception)
+            {
+                ServiceLog.Error("Failed to stop the idle service.", exception);
+            }
+        });
     }
 
     private void LogEffectiveModeChange(WakeMode mode)

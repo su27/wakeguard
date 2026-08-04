@@ -17,8 +17,8 @@ internal static class Program
 
     private static void RunDiagnosticHost(TimeSpan? duration, string? pipeName)
     {
-        using var service = new WakeGuardWindowsService(pipeName);
         using var stopped = new ManualResetEventSlim();
+        using var service = new WakeGuardWindowsService(pipeName, stopped.Set);
         Console.CancelKeyPress += (_, eventArgs) =>
         {
             eventArgs.Cancel = true;

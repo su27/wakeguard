@@ -30,13 +30,15 @@ flowchart LR
 - `WakeGuard.Windows` contains Windows API and pipe-security adapters.
 - `WakeGuard.Contracts` contains versioned IPC messages and bounded framing.
 
+Per-user preferences are stored under `%LOCALAPPDATA%\WakeGuard`. The tray owns its `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` value, allowing startup to be toggled without elevation. The MSI removes the legacy machine-wide startup value during install or upgrade.
+
 ## Lease model
 
 Every tray process creates a random lease identifier and renews it periodically. A lease contains the authenticated Windows user SID, a random client identifier, the requested mode, a short heartbeat deadline, and an optional user-selected stop time.
 
-The service obtains the SID by impersonating the connected pipe client; it never trusts a SID sent in JSON. The effective machine mode is the strongest unexpired lease. Fast User Switching is therefore safe: exiting one user's tray cannot cancel another user's request.
+The service obtains the SID by impersonating the connected pipe client; it never trusts a SID sent in JSON. The effective machine mode is the strongest unexpired lease. Fast User Switching is therefore safe: exiting one user's tray cannot cancel another user's request, and any user's active lease keeps the service running.
 
-If heartbeats stop, the service expires the lease and clears or downgrades its Power Request. The expiry scheduler sleeps until the nearest actual deadline and waits indefinitely when there are no leases, so the idle service does not poll. A service restart loses its in-memory leases, but a running tray recreates its lease on the next heartbeat. A reboot always starts inactive.
+If heartbeats stop, the service expires the lease and clears or downgrades its Power Request. The expiry scheduler sleeps until the nearest actual deadline. With no leases or active requests, the service waits through a 30-second quiet period and then stops itself. Windows registers the named pipe as a Service Trigger endpoint, so the next connection starts the demand-start service without granting interactive users service-control permission. A service restart loses its in-memory leases, but a running tray recreates its lease on the next heartbeat. A reboot always starts inactive and does not launch the service until it is needed.
 
 The service uses `PowerRequestSystemRequired` and `PowerRequestExecutionRequired` for every active lease. Windows returns `ERROR_NOT_SUPPORTED` when a Session 0 service attempts `PowerRequestDisplayRequired`, so the interactive tray process owns that request only for display-on mode. The display handle is process-bound and is released automatically if the tray exits or crashes; the service lease still protects system-awake state independently.
 
@@ -57,4 +59,4 @@ The pipe grants full control to `LocalSystem` and `LocalService`, read/write to 
 
 ## Packaging
 
-Release builds target .NET 10 LTS and publish self-contained `win-x64` executables. The background service uses Native AOT to minimize its resident runtime footprint. The final MSI installs both executables per machine, registers the service under `LocalService`, creates required ACLs, and starts the tray at user logon. Binaries are designed for Authenticode signing when a certificate is available.
+Release builds target .NET 10 LTS and publish self-contained `win-x64` executables. The background service uses Native AOT to minimize its resident runtime footprint. The final MSI installs both executables per machine, registers the service under `LocalService`, and creates required ACLs. The non-elevated tray manages startup for the current user according to its saved preference. Binaries are designed for Authenticode signing when a certificate is available.

@@ -6,10 +6,6 @@ namespace WakeGuard.Tray;
 internal static class NativeTrayMenu
 {
     private const uint MfString = 0x0000;
-    private const uint MfGrayed = 0x0001;
-    private const uint MfDisabled = 0x0002;
-    private const uint MfChecked = 0x0008;
-    private const uint MfPopup = 0x0010;
     private const uint MfSeparator = 0x0800;
     private const uint MfDefault = 0x1000;
     private const uint TpmRightButton = 0x0002;
@@ -20,27 +16,11 @@ internal static class NativeTrayMenu
     internal enum Command : uint
     {
         None = 0,
-        Status = 1000,
-        KeepAwake,
-        KeepDisplayOn,
-        Lock,
-        ScreenSaver,
-        Stop,
-        Timer30Minutes,
-        Timer1Hour,
-        Timer2Hours,
-        Timer4Hours,
+        Settings = 1000,
         Exit,
     }
 
-    internal readonly record struct State(
-        string StatusText,
-        bool KeepAwakeChecked,
-        bool KeepDisplayOnChecked,
-        bool ActiveCommandsEnabled,
-        string TimerText);
-
-    internal static Command Show(nint owner, State state)
+    internal static Command Show(nint owner, UiText text)
     {
         var menu = CreatePopupMenu();
         if (menu == nint.Zero)
@@ -50,7 +30,7 @@ internal static class NativeTrayMenu
 
         try
         {
-            BuildMenu(menu, state);
+            BuildMenu(menu, text);
             if (!GetCursorPos(out var location))
             {
                 throw new Win32Exception(Marshal.GetLastWin32Error());
@@ -73,49 +53,11 @@ internal static class NativeTrayMenu
         }
     }
 
-    private static void BuildMenu(nint menu, State state)
+    private static void BuildMenu(nint menu, UiText text)
     {
-        AppendItem(menu, Command.Status, state.StatusText, MfGrayed | MfDisabled | MfDefault);
+        AppendItem(menu, Command.Settings, text.MenuSettings, MfDefault);
         AppendSeparator(menu);
-        AppendItem(menu, Command.KeepAwake, "保持唤醒", state.KeepAwakeChecked ? MfChecked : 0);
-        AppendItem(
-            menu,
-            Command.KeepDisplayOn,
-            "保持唤醒 · 屏幕常亮",
-            state.KeepDisplayOnChecked ? MfChecked : 0);
-        AppendItem(menu, Command.Lock, "保持唤醒 · 立刻锁屏");
-        AppendItem(menu, Command.ScreenSaver, "保持唤醒 · 播放屏保");
-        AppendSeparator(menu);
-
-        var disabled = state.ActiveCommandsEnabled ? 0U : MfGrayed | MfDisabled;
-        AppendItem(menu, Command.Stop, "退出唤醒状态", disabled);
-
-        var timerMenu = CreatePopupMenu();
-        if (timerMenu == nint.Zero)
-        {
-            throw new Win32Exception(Marshal.GetLastWin32Error());
-        }
-
-        var submenuAttached = false;
-        try
-        {
-            AppendItem(timerMenu, Command.Timer30Minutes, "30 分钟");
-            AppendItem(timerMenu, Command.Timer1Hour, "1 小时");
-            AppendItem(timerMenu, Command.Timer2Hours, "2 小时");
-            AppendItem(timerMenu, Command.Timer4Hours, "4 小时");
-            AppendSubmenu(menu, timerMenu, state.TimerText, disabled);
-            submenuAttached = true;
-        }
-        finally
-        {
-            if (!submenuAttached)
-            {
-                _ = DestroyMenu(timerMenu);
-            }
-        }
-
-        AppendSeparator(menu);
-        AppendItem(menu, Command.Exit, "退出");
+        AppendItem(menu, Command.Exit, text.MenuExit);
     }
 
     private static void AppendItem(nint menu, Command command, string text, uint state = 0)
@@ -129,14 +71,6 @@ internal static class NativeTrayMenu
     private static void AppendSeparator(nint menu)
     {
         if (!AppendMenu(menu, MfSeparator, 0, null))
-        {
-            throw new Win32Exception(Marshal.GetLastWin32Error());
-        }
-    }
-
-    private static void AppendSubmenu(nint menu, nint submenu, string text, uint state)
-    {
-        if (!AppendMenu(menu, MfPopup | state, (nuint)submenu, text))
         {
             throw new Win32Exception(Marshal.GetLastWin32Error());
         }

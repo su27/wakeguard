@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Drawing.Drawing2D;
+using System.Globalization;
 using System.Runtime.InteropServices;
 using Microsoft.Win32;
 using WakeGuard.Contracts;
@@ -32,7 +33,6 @@ internal sealed class TrayPopupForm : Form
     private readonly PopupButton _lockButton;
     private readonly PopupButton _screenSaverButton;
     private readonly ToolTip _actionHelpTip;
-    private readonly LinkLabel _exitLink;
     private readonly Timer _countdownTimer;
     private readonly Timer _pendingFeedbackTimer;
     private Bitmap? _appIconImage;
@@ -48,8 +48,7 @@ internal sealed class TrayPopupForm : Form
         Func<WakeMode, Task> SetModeAsync,
         Func<TimeSpan?, Task> SetDurationAsync,
         Func<Task> LockAsync,
-        Func<Task> StartScreenSaverAsync,
-        Func<Task> ExitAsync);
+        Func<Task> StartScreenSaverAsync);
 
     internal readonly record struct State(
         string StatusText,
@@ -87,19 +86,7 @@ internal sealed class TrayPopupForm : Form
             SizeMode = PictureBoxSizeMode.Zoom,
             TabStop = false,
         };
-        _statusLabel = CreateLabel("正在连接 WakeGuard 服务…", 10F);
-        _exitLink = new LinkLabel
-        {
-            AutoSize = true,
-            Dock = DockStyle.Fill,
-            Font = new Font(Font.FontFamily, 9F),
-            LinkBehavior = LinkBehavior.HoverUnderline,
-            Margin = Padding.Empty,
-            TabStop = true,
-            Text = "退出",
-            TextAlign = ContentAlignment.MiddleRight,
-        };
-        _exitLink.Click += ExitLinkClick;
+        _statusLabel = CreateLabel(UiText.Current.PopupConnecting, 10F);
         _headerDivider = new Panel
         {
             Dock = DockStyle.Top,
@@ -107,33 +94,29 @@ internal sealed class TrayPopupForm : Form
             Margin = new Padding(0, 8, 0, 9),
         };
 
-        _modeHeading = CreateLabel("唤醒状态", 9F, FontStyle.Bold);
-        _inactiveButton = CreateButton("不保持");
-        _keepAwakeButton = CreateButton("保持唤醒");
-        _displayOnButton = CreateButton("唤醒且常亮");
-        _inactiveButton.AccessibleDescription = "停止 WakeGuard 的唤醒请求";
-        _keepAwakeButton.AccessibleDescription = "保持系统唤醒，屏幕关闭仍由 Windows 管理";
-        _displayOnButton.AccessibleDescription = "同时保持系统唤醒和屏幕常亮";
+        _modeHeading = CreateLabel(string.Empty, 9F, FontStyle.Bold);
+        _inactiveButton = CreateButton(string.Empty);
+        _keepAwakeButton = CreateButton(string.Empty);
+        _displayOnButton = CreateButton(string.Empty);
         _inactiveButton.Click += async (_, _) => await SetModeAsync(WakeMode.Inactive);
         _keepAwakeButton.Click += async (_, _) => await SetModeAsync(WakeMode.KeepAwake);
         _displayOnButton.Click += async (_, _) => await SetModeAsync(WakeMode.KeepAwakeAndDisplayOn);
 
-        _durationHeading = CreateLabel("保持时间", 9F, FontStyle.Bold);
-        _unlimitedButton = CreateButton("不限");
+        _durationHeading = CreateLabel(string.Empty, 9F, FontStyle.Bold);
+        _unlimitedButton = CreateButton(string.Empty);
         _unlimitedButton.Click += async (_, _) => await SetDurationAsync(null);
-        AddDurationButton("30 分钟", TimeSpan.FromMinutes(30));
-        AddDurationButton("1 小时", TimeSpan.FromHours(1));
-        AddDurationButton("2 小时", TimeSpan.FromHours(2));
-        AddDurationButton("4 小时", TimeSpan.FromHours(4));
+        AddDurationButton(string.Empty, TimeSpan.FromMinutes(30));
+        AddDurationButton(string.Empty, TimeSpan.FromHours(1));
+        AddDurationButton(string.Empty, TimeSpan.FromHours(2));
+        AddDurationButton(string.Empty, TimeSpan.FromHours(4));
 
-        _actionHeading = CreateLabel("立即操作", 9F, FontStyle.Bold);
+        _actionHeading = CreateLabel(string.Empty, 9F, FontStyle.Bold);
         _actionHeading.AutoEllipsis = false;
         _actionHeading.AutoSize = true;
         _actionHeading.Anchor = AnchorStyles.Left;
         _actionHeading.Dock = DockStyle.None;
         _actionHelpButton = new HelpIconButton
         {
-            AccessibleDescription = "查看立即操作说明",
             Dock = DockStyle.Fill,
             Font = new Font(Font.FontFamily, 6.5F, FontStyle.Bold),
             Margin = Padding.Empty,
@@ -146,32 +129,28 @@ internal sealed class TrayPopupForm : Form
             ShowAlways = true,
         };
         _actionHelpButton.Click += (_, _) => _actionHelpTip.Show(
-            "不会改变上面的唤醒状态和保持时间",
+            UiText.Current.ActionHelpText,
             _actionHelpButton,
             0,
             _actionHelpButton.Height + 4,
             5_000);
-        _lockButton = CreateButton("锁定电脑");
-        _screenSaverButton = CreateButton("启动屏幕保护程序");
-        _lockButton.AccessibleDescription = "只锁定电脑，不改变当前唤醒状态和保持时间";
-        _screenSaverButton.AccessibleDescription = "只启动屏幕保护程序，不改变当前唤醒状态和保持时间";
+        _lockButton = CreateButton(string.Empty);
+        _screenSaverButton = CreateButton(string.Empty);
         _lockButton.Click += LockButtonClick;
         _screenSaverButton.Click += ScreenSaverButtonClick;
 
         var header = new TableLayoutPanel
         {
             BackColor = Color.Transparent,
-            ColumnCount = 3,
+            ColumnCount = 2,
             Dock = DockStyle.Fill,
             Margin = Padding.Empty,
             RowCount = 1,
         };
         header.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 32));
         header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        header.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 64));
         header.Controls.Add(_appIcon, 0, 0);
         header.Controls.Add(_statusLabel, 1, 0);
-        header.Controls.Add(_exitLink, 2, 0);
 
         var modeButtons = CreateButtonRow(_inactiveButton, _keepAwakeButton, _displayOnButton);
         var durationButtons = CreateButtonRow([_unlimitedButton, .. _durationButtons.Keys]);
@@ -236,6 +215,7 @@ internal sealed class TrayPopupForm : Form
         Deactivate += (_, _) => Hide();
         VisibleChanged += (_, _) => _countdownTimer.Enabled = Visible;
 
+        ApplyLocalization();
         ApplyTheme();
         ApplyState();
     }
@@ -283,6 +263,38 @@ internal sealed class TrayPopupForm : Form
             _state = state;
         }
 
+        ApplyState();
+    }
+
+    internal void ApplyLocalization()
+    {
+        var text = UiText.Current;
+        _modeHeading.Text = text.ModeHeading;
+        _inactiveButton.Text = text.ModeInactive;
+        _keepAwakeButton.Text = text.ModeKeepAwake;
+        _displayOnButton.Text = text.ModeDisplayOn;
+        _inactiveButton.AccessibleDescription = text.ModeInactiveDescription;
+        _keepAwakeButton.AccessibleDescription = text.ModeKeepAwakeDescription;
+        _displayOnButton.AccessibleDescription = text.ModeDisplayOnDescription;
+        _durationHeading.Text = text.DurationHeading;
+        _unlimitedButton.Text = text.DurationUnlimited;
+        foreach (var (button, duration) in _durationButtons)
+        {
+            button.Text = duration switch
+            {
+                var value when value == TimeSpan.FromMinutes(30) => text.Duration30Minutes,
+                var value when value == TimeSpan.FromHours(1) => text.Duration1Hour,
+                var value when value == TimeSpan.FromHours(2) => text.Duration2Hours,
+                _ => text.Duration4Hours,
+            };
+        }
+
+        _actionHeading.Text = text.ActionHeading;
+        _actionHelpButton.AccessibleDescription = text.ActionHelpAccessible;
+        _lockButton.Text = text.LockComputer;
+        _screenSaverButton.Text = text.StartScreenSaver;
+        _lockButton.AccessibleDescription = text.LockComputerDescription;
+        _screenSaverButton.AccessibleDescription = text.StartScreenSaverDescription;
         ApplyState();
     }
 
@@ -357,10 +369,10 @@ internal sealed class TrayPopupForm : Form
         };
         var progressText = mode switch
         {
-            WakeMode.Inactive => "正在关闭服务…",
-            _ when previousMode == WakeMode.Inactive => "正在启动服务…",
-            _ when previousMode != mode => "正在切换模式…",
-            _ => "正在更新服务…",
+            WakeMode.Inactive => UiText.Current.ProgressStopping,
+            _ when previousMode == WakeMode.Inactive => UiText.Current.ProgressStarting,
+            _ when previousMode != mode => UiText.Current.ProgressSwitching,
+            _ => UiText.Current.ProgressUpdating,
         };
         await RunWakeCommandAsync(
             optimisticState,
@@ -377,7 +389,7 @@ internal sealed class TrayPopupForm : Form
         };
         await RunWakeCommandAsync(
             optimisticState,
-            "正在更新保持时间…",
+            UiText.Current.ProgressUpdatingDuration,
             () => _actions.SetDurationAsync(duration));
     }
 
@@ -422,12 +434,6 @@ internal sealed class TrayPopupForm : Form
     {
         Hide();
         await _actions.StartScreenSaverAsync();
-    }
-
-    private async void ExitLinkClick(object? sender, EventArgs eventArgs)
-    {
-        Hide();
-        await _actions.ExitAsync();
     }
 
     private void ApplyState()
@@ -484,9 +490,9 @@ internal sealed class TrayPopupForm : Form
         _appIcon.Image = newImage;
         _appIcon.AccessibleDescription = iconState switch
         {
-            TrayIconFactory.IconState.KeepAwake => "保持唤醒",
-            TrayIconFactory.IconState.DisplayOn => "保持常亮",
-            _ => "系统默认",
+            TrayIconFactory.IconState.KeepAwake => UiText.Current.ModeKeepAwake,
+            TrayIconFactory.IconState.DisplayOn => UiText.Current.StatusDisplayOn,
+            _ => UiText.Current.StatusInactive,
         };
         oldImage?.Dispose();
     }
@@ -507,9 +513,9 @@ internal sealed class TrayPopupForm : Form
 
         var statusText = _state.Mode switch
         {
-            WakeMode.KeepAwake => "保持唤醒",
-            WakeMode.KeepAwakeAndDisplayOn => "保持常亮",
-            _ => "系统默认",
+            WakeMode.KeepAwake => UiText.Current.ModeKeepAwake,
+            WakeMode.KeepAwakeAndDisplayOn => UiText.Current.ModeDisplayOn,
+            _ => UiText.Current.StatusInactive,
         };
         if (_state.Mode == WakeMode.Inactive || _state.StopAtUtc is not { } stopAtUtc)
         {
@@ -520,7 +526,10 @@ internal sealed class TrayPopupForm : Form
         var remaining = stopAtUtc - DateTimeOffset.UtcNow;
         if (remaining <= TimeSpan.Zero)
         {
-            _statusLabel.Text = $"{statusText} · 即将结束";
+            _statusLabel.Text = string.Format(
+                CultureInfo.CurrentCulture,
+                UiText.Current.EndingSoonFormat,
+                statusText);
             return;
         }
 
@@ -529,11 +538,20 @@ internal sealed class TrayPopupForm : Form
         var minutes = totalMinutes % 60;
         var remainingText = hours switch
         {
-            > 0 when minutes > 0 => $"{hours} 小时 {minutes} 分钟",
-            > 0 => $"{hours} 小时",
-            _ => $"{minutes} 分钟",
+            > 0 when minutes > 0 => string.Format(
+                CultureInfo.CurrentCulture,
+                UiText.Current.HourMinuteFormat,
+                hours,
+                minutes),
+            > 0 => string.Format(CultureInfo.CurrentCulture, UiText.Current.HourFormat, hours),
+            _ => string.Format(CultureInfo.CurrentCulture, UiText.Current.MinuteFormat, minutes),
         };
-        _statusLabel.Text = $"{statusText} · 剩余 {remainingText} · {stopAtUtc.ToLocalTime():HH:mm} 结束";
+        _statusLabel.Text = string.Format(
+            CultureInfo.CurrentCulture,
+            UiText.Current.RemainingFormat,
+            statusText,
+            remainingText,
+            stopAtUtc.ToLocalTime());
     }
 
     private void PositionNearCursor()
@@ -576,10 +594,6 @@ internal sealed class TrayPopupForm : Form
         _durationHeading.ForeColor = _palette.Text;
         _actionHeading.ForeColor = _palette.Text;
         _actionHelpButton.ApplyPalette(_palette);
-        _exitLink.LinkColor = _palette.SecondaryText;
-        _exitLink.ActiveLinkColor = _palette.Text;
-        _exitLink.VisitedLinkColor = _palette.SecondaryText;
-
         foreach (var button in GetButtons())
         {
             button.ApplyPalette(_palette);
@@ -730,8 +744,8 @@ internal sealed class TrayPopupForm : Form
 
             var isDark = IsDarkAppTheme();
             var accent = isDark
-                ? Color.FromArgb(30, 54, 95)
-                : Color.FromArgb(45, 91, 160);
+                ? Color.FromArgb(8, 105, 232)
+                : Color.FromArgb(0, 98, 205);
             if (isDark)
             {
                 return new Palette(
@@ -1047,6 +1061,16 @@ internal sealed class TrayPopupForm : Form
 
         private void DrawOuterShadow(Graphics graphics, RectangleF bodyBounds)
         {
+            if (Enabled && IsSelected)
+            {
+                var glowBounds = RectangleF.Inflate(bodyBounds, 2.25F, 2.25F);
+                glowBounds.Offset(0, 0.5F);
+                using var glowPath = RoundedRectangle.Create(glowBounds, 11F);
+                var glowAlpha = _palette.IsDark ? 34 : 24;
+                using var glow = new SolidBrush(Color.FromArgb(glowAlpha, _palette.Accent));
+                graphics.FillPath(glow, glowPath);
+            }
+
             var softBounds = RectangleF.Inflate(bodyBounds, 1F, 1F);
             softBounds.Offset(0, 1F);
             using var softPath = RoundedRectangle.Create(softBounds, 10F);
@@ -1084,7 +1108,11 @@ internal sealed class TrayPopupForm : Form
 
             var innerBounds = RectangleF.Inflate(bodyBounds, -1F, -1F);
             using var innerPath = RoundedRectangle.Create(innerBounds, 8F);
-            var lightAlpha = Enabled ? (_palette.IsDark ? 13 : 38) : 8;
+            var lightAlpha = Enabled
+                ? IsSelected
+                    ? (_palette.IsDark ? 30 : 46)
+                    : (_palette.IsDark ? 13 : 38)
+                : 8;
             using var sharpLightShadow = new Pen(Color.FromArgb(lightAlpha, Color.White), 0.45F);
             graphics.DrawPath(sharpLightShadow, innerPath);
         }
@@ -1108,6 +1136,16 @@ internal sealed class TrayPopupForm : Form
             if (_mouseDown && Enabled)
             {
                 baseColor = Palette.Blend(baseColor, _palette.Background, 0.86F);
+            }
+
+            if (Enabled && IsSelected)
+            {
+                var energizedColor = _mouseOver
+                    ? Palette.Blend(baseColor, Color.White, 0.93F)
+                    : baseColor;
+                return (
+                    Palette.Blend(energizedColor, Color.FromArgb(82, 180, 255), 0.76F),
+                    Palette.Blend(energizedColor, Color.Black, 0.87F));
             }
 
             var topAmount = _palette.IsDark ? 0.96F : 0.99F;

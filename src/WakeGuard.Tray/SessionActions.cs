@@ -15,7 +15,7 @@ internal static class SessionActions
     {
         if (!LockWorkStation())
         {
-            throw new Win32Exception(Marshal.GetLastWin32Error(), "Windows 无法锁定当前工作站");
+            throw new Win32Exception(Marshal.GetLastWin32Error(), UiText.Current.LockNativeFailure);
         }
     }
 
@@ -49,7 +49,7 @@ internal static class SessionActions
         var fallback = Path.Combine(Environment.SystemDirectory, "scrnsave.scr");
         if (!File.Exists(fallback))
         {
-            throw new FileNotFoundException("Windows 没有配置屏幕保护程序，也找不到内置黑屏屏保。", fallback);
+            throw new FileNotFoundException(UiText.Current.ScreenSaverMissing, fallback);
         }
 
         return fallback;

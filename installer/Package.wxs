@@ -24,6 +24,18 @@
                            Timeout="5"
                            TerminateProcess="0" />
 
+    <CustomAction Id="ConfigureWakeGuardPipeTrigger"
+                  Directory="SystemFolder"
+                  ExeCommand="sc.exe triggerinfo WakeGuard start/namedpipe/WakeGuard.Service.v1"
+                  Execute="deferred"
+                  Impersonate="no"
+                  Return="check" />
+    <InstallExecuteSequence>
+      <Custom Action="ConfigureWakeGuardPipeTrigger"
+              After="InstallServices"
+              Condition="NOT REMOVE~=&quot;ALL&quot;" />
+    </InstallExecuteSequence>
+
     <StandardDirectory Id="ProgramFiles6432Folder">
       <Directory Id="INSTALLFOLDER" Name="WakeGuard">
         <Directory Id="TRAYFOLDER" Name="Tray" />
@@ -53,11 +65,10 @@
         <File Id="TrayExecutable"
               Source="$(var.TrayPublishDir)\WakeGuard.Tray.exe"
               KeyPath="yes" />
-        <RegistryValue Root="HKLM"
-                       Key="Software\Microsoft\Windows\CurrentVersion\Run"
-                       Name="WakeGuard"
-                       Type="string"
-                       Value="&quot;[#TrayExecutable]&quot;" />
+        <RemoveRegistryValue Id="RemoveLegacyMachineStartup"
+                             Root="HKLM"
+                             Key="Software\Microsoft\Windows\CurrentVersion\Run"
+                             Name="WakeGuard" />
       </Component>
     </DirectoryRef>
   </Fragment>
@@ -99,7 +110,7 @@
                         DisplayName="WakeGuard 后台唤醒服务"
                         Description="锁屏和显示器关闭后仍维护 Windows 系统级唤醒请求。"
                         Type="ownProcess"
-                        Start="auto"
+                        Start="demand"
                         ErrorControl="normal"
                         Account="NT AUTHORITY\LocalService"
                         Vital="yes">
@@ -111,7 +122,6 @@
         </ServiceInstall>
         <ServiceControl Id="WakeGuardServiceControl"
                         Name="WakeGuard"
-                        Start="install"
                         Stop="both"
                         Remove="uninstall"
                         Wait="yes" />

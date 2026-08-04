@@ -17,6 +17,9 @@
     <ProjectReference Include="..\WakeGuard.Windows\WakeGuard.Windows.csproj" />
   </ItemGroup>
   <ItemGroup>
+    <InternalsVisibleTo Include="WakeGuard.Windows.Tests" />
+  </ItemGroup>
+  <ItemGroup>
     <EmbeddedResource Include="Assets\TrayInactive.ico" LogicalName="WakeGuard.Tray.Assets.TrayInactive.ico" />
     <EmbeddedResource Include="Assets\TrayKeepAwake.ico" LogicalName="WakeGuard.Tray.Assets.TrayKeepAwake.ico" />
     <EmbeddedResource Include="Assets\TrayDisplayOn.ico" LogicalName="WakeGuard.Tray.Assets.TrayDisplayOn.ico" />

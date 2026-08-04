@@ -5,6 +5,8 @@ internal static class Program
     [STAThread]
     private static void Main()
     {
+        var settings = TraySettingsStore.Load();
+        UiText.Use(settings.Language);
         using var instanceMutex = new Mutex(
             initiallyOwned: true,
             name: @"Local\WakeGuard.Tray",
@@ -12,7 +14,7 @@ internal static class Program
         if (!isFirstInstance)
         {
             MessageBox.Show(
-                "WakeGuard 已经在当前 Windows 会话中运行。",
+                UiText.Current.AlreadyRunning,
                 "WakeGuard",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Information);
@@ -20,6 +22,6 @@ internal static class Program
         }
 
         ApplicationConfiguration.Initialize();
-        Application.Run(new TrayApplicationContext());
+        Application.Run(new TrayApplicationContext(settings));
     }
 }

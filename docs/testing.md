@@ -12,11 +12,23 @@ Core tests cover lease renewal, lease expiry, user-selected stop time, multiple-
 ## Installation
 
 1. Install the MSI on a machine where WakeGuard has never been installed.
-2. Confirm `sc.exe qc WakeGuard` reports `SERVICE_START_NAME` as `NT AUTHORITY\LocalService` and `START_TYPE` as automatic.
-3. Confirm the tray starts from the Start menu without elevation.
-4. Reinstall the same MSI and confirm repair succeeds.
-5. Install a newer MSI over the old version and confirm the tray closes, the service stops, files update, and both restart cleanly.
-6. Uninstall while a wake mode is active and confirm no WakeGuard entries remain in `powercfg /requests`.
+2. Confirm `sc.exe qc WakeGuard` reports `SERVICE_START_NAME` as `NT AUTHORITY\LocalService` and `START_TYPE` as demand start.
+3. Confirm `sc.exe qtriggerinfo WakeGuard` reports a named-pipe start trigger for `WakeGuard.Service.v1`.
+4. With wake mode inactive, wait 30 seconds and confirm the service reaches `Stopped`.
+5. Enable a wake mode and confirm the pipe request automatically starts the service without elevation.
+6. Confirm the tray starts from the Start menu without elevation.
+7. Reinstall the same MSI and confirm repair succeeds.
+8. Install a newer MSI over the old version and confirm the tray closes, the service stops, files update, and the service remains stopped until requested.
+9. Uninstall while a wake mode is active and confirm no WakeGuard entries remain in `powercfg /requests`.
+
+## Tray interaction and settings
+
+1. Left-click the tray icon and confirm the awake control panel opens without showing a native menu.
+2. Right-click the tray icon and confirm the native menu contains only **Settings** and **Exit**.
+3. Disable startup in Settings and confirm the current user's `HKCU\Software\Microsoft\Windows\CurrentVersion\Run\WakeGuard` value is absent; enable it and confirm it points to the installed tray executable.
+4. Switch between Chinese and English and confirm the control panel, tray menu, settings window, status text, and error prompts update without restarting.
+5. Close and restart the tray and confirm startup and language preferences persist.
+6. Confirm the About section reports the same version as the installed MSI.
 
 ## Power behavior
 
@@ -27,7 +39,8 @@ Core tests cover lease renewal, lease expiry, user-selected stop time, multiple-
 5. Test all four timers and confirm the service clears requests at the deadline.
 6. End `WakeGuard.Tray.exe` from Task Manager and confirm requests disappear within 75 seconds.
 7. Stop and restart the service while the tray is running; confirm the tray reconnects and recreates its lease on the next heartbeat.
-8. Reboot while a mode is active; confirm the machine starts inactive until a tray requests a mode again.
+8. Disable wake mode, confirm the service stops after its quiet period, then re-enable wake mode and confirm trigger-start works again.
+9. Reboot while a mode is active; confirm the machine starts inactive until a tray requests a mode again.
 
 ## Session behavior
 

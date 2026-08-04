@@ -10,7 +10,7 @@ WakeGuard 不模拟鼠标或键盘，不定期制造“用户活动”，也不�
 
 ## 功能
 
-| 托盘菜单 | 系统保持唤醒 | 显示器保持点亮 | 额外操作 |
+| 控制面板 | 系统保持唤醒 | 显示器保持点亮 | 额外操作 |
 | --- | :---: | :---: | --- |
 | **保持唤醒** | 是 | 否 | 显示器关闭和自动锁屏仍由 Windows 管理 |
 | **保持唤醒 · 屏幕常亮** | 是 | 是 | 阻止显示器因空闲关闭 |
@@ -18,9 +18,10 @@ WakeGuard 不模拟鼠标或键盘，不定期制造“用户活动”，也不�
 | **保持唤醒 · 播放屏保** | 是 | 否 | 启动当前屏保；未配置时使用 Windows 黑屏屏保 |
 | **退出唤醒状态** | 否 | 否 | 释放请求，但保留托盘程序 |
 | **定时退出唤醒状态** | 取决于当前模式 | 取决于当前模式 | 支持 30 分钟、1、2 或 4 小时 |
-| **退出** | 否 | 否 | 释放请求并退出托盘程序 |
 
 托盘图标也会显示当前状态：灰白色为未唤醒，黄色为保持唤醒，橙红色为保持唤醒且屏幕常亮。
+
+左键单击托盘图标打开唤醒控制面板；右键菜单提供设置和退出。设置页可控制当前用户登录后是否自动启动 WakeGuard、在中文和英文之间切换界面语言，并显示版本与关于信息。
 
 > 播放屏保并不自动锁屏。恢复时是否要求登录，取决于 Windows 的“在恢复时显示登录屏幕”设置。普通程序也无法在已经锁定的安全桌面上继续覆盖播放第三方屏保。
 
@@ -28,16 +29,16 @@ WakeGuard 不模拟鼠标或键盘，不定期制造“用户活动”，也不�
 
 ### 安装
 
-1. 获取 `WakeGuard-<version>-win-x64.msi`。本地构建的当前版本位于 `artifacts\installer\WakeGuard-0.1.4-win-x64.msi`。
+1. 获取 `WakeGuard-<version>-win-x64.msi`。本地构建位于 `artifacts\installer`。
 2. 双击 MSI，并接受 Windows 的管理员权限提示。管理员权限只用于安装服务和写入 `Program Files`。
 3. 安装结束后，从开始菜单启动一次 **WakeGuard**。以后每次登录 Windows，托盘程序都会自动启动。
-4. 在任务栏通知区域右键 WakeGuard 杯子图标，选择需要的模式。
+4. 在任务栏通知区域左键单击 WakeGuard 杯子图标，选择需要的模式；右键可打开设置或退出。
 
 当前构建尚未进行 Authenticode 代码签名，因此 Windows 可能显示“未知发布者”。在正式对外发布前应使用可信证书签名 MSI 和两个 EXE。
 
 ### 升级
 
-直接运行版本号更高的 MSI。安装器会关闭旧托盘、停止服务、更新文件并重新启动服务。升级后如托盘未立即出现，从开始菜单启动 WakeGuard 即可。
+直接运行版本号更高的 MSI。安装器会关闭旧托盘、停止服务并更新文件；后台服务会在托盘下次请求命名管道时由 Windows 自动启动。升级后如托盘未立即出现，从开始菜单启动 WakeGuard 即可。
 
 ### 卸载
 
@@ -47,7 +48,7 @@ WakeGuard 不模拟鼠标或键盘，不定期制造“用户活动”，也不�
 
 ```mermaid
 flowchart LR
-    A["WakeGuard.Tray<br>当前用户会话"] -->|"版本化命名管道<br>20 秒心跳"| B["WakeGuard.Service<br>LocalService / Session 0"]
+    A["WakeGuard.Tray<br>当前用户会话"] -->|"版本化命名管道<br>激活时 20 秒心跳"| B["WakeGuard.Service<br>LocalService / Session 0<br>管道触发启动"]
     B --> C["SystemRequired<br>ExecutionRequired"]
     A --> D["DisplayRequired<br>仅屏幕常亮模式"]
     C --> E["Windows Power Request API"]
@@ -58,7 +59,7 @@ flowchart LR
 - `WakeGuard.Service.exe` 以 `NT AUTHORITY\LocalService` 运行，持有 `PowerRequestSystemRequired` 和 `PowerRequestExecutionRequired`。因此切换到锁屏安全桌面后，系统级唤醒请求仍然存在。
 - Windows 不支持 Session 0 服务设置 `DisplayRequired`，所以显示请求必须由托盘进程持有；托盘退出或崩溃后，该句柄会被 Windows 自动释放。
 
-托盘向服务申请一个短期租约，并每 20 秒续租。服务在 75 秒内收不到心跳就自动释放对应请求。多个 Windows 用户同时登录时，每个用户的租约互相隔离，系统采用所有有效租约中最强的模式。
+托盘仅在启用唤醒后向服务申请短期租约，并每 20 秒续租。服务在 75 秒内收不到心跳就自动释放对应请求。没有有效租约时，服务等待 30 秒安静期后退出；下一次管道请求会通过 Windows Service Trigger 自动启动它。多个 Windows 用户同时登录时，每个用户的租约互相隔离，系统采用所有有效租约中最强的模式。
 
 更完整的进程、IPC、安全和失败恢复设计见 [架构文档](docs/architecture.md)。
 
@@ -85,7 +86,7 @@ Get-Service WakeGuard
 sc.exe qc WakeGuard
 ```
 
-服务应为 `Running`、自动启动，账户应为 `NT AUTHORITY\LocalService`。
+服务账户应为 `NT AUTHORITY\LocalService`，启动类型为按需（Trigger Start）。未保持唤醒时服务可以是 `Stopped`；启用任一唤醒模式后应自动变为 `Running`。
 
 ## 故障排查
 
@@ -97,7 +98,7 @@ sc.exe qc WakeGuard
 
 ### 显示“后台服务未连接”
 
-在管理员 PowerShell 中运行：
+先重新点击一次唤醒模式；正常情况下，命名管道请求会自动启动服务。如果仍然失败，可在管理员 PowerShell 中检查并手工启动服务：
 
 ```powershell
 Get-Service WakeGuard
@@ -136,6 +137,7 @@ C:\ProgramData\WakeGuard\service.log
 - IPC 使用 4 字节长度前缀，并在反序列化前限制为 16 KiB。
 - 托盘崩溃或被强制结束后，租约最多 75 秒失效；显示请求则随进程句柄立即释放。
 - 服务崩溃后由 Service Control Manager 自动重启，托盘会在下一次心跳重建租约。
+- 服务没有有效租约时会正常退出；这不是崩溃，也不会触发失败重启。
 - 重启电脑后始终从未唤醒状态开始，不会悄悄恢复上次模式。
 
 ## 开发

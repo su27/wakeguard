@@ -12,29 +12,34 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private readonly SemaphoreSlim _requestLock = new(1, 1);
     private readonly ShutdownWindow _shutdownWindow;
     private readonly TrayPopupForm _popup;
+    private TraySettings _settings;
+    private SettingsForm? _settingsForm;
     private WindowsDisplayRequest? _displayRequest;
     private Icon _currentIcon;
     private TrayIconFactory.IconState _currentIconState = TrayIconFactory.IconState.Disconnected;
     private WakeMode _desiredMode;
     private DateTimeOffset? _stopAtUtc;
     private TimeSpan? _selectedDuration;
-    private bool _serviceConnected;
+    private bool _serviceConnected = true;
     private bool _exiting;
-    private string _statusText = "正在连接 WakeGuard 服务…";
+    private string _statusText;
 
-    internal TrayApplicationContext()
+    internal TrayApplicationContext(TraySettings settings)
     {
-        _currentIcon = TrayIconFactory.Create(TrayIconFactory.IconState.Disconnected);
+        _settings = settings;
+        _statusText = UiText.Current.StatusInactive;
+        _currentIconState = TrayIconFactory.IconState.Inactive;
+        _currentIcon = TrayIconFactory.Create(_currentIconState);
         _notifyIcon = new NotifyIcon
         {
             Icon = _currentIcon,
-            Text = "WakeGuard - 正在连接服务",
+            Text = $"WakeGuard - {_statusText}",
         };
 
         _heartbeatTimer = new Timer
         {
             Interval = (int)ProtocolConstants.HeartbeatInterval.TotalMilliseconds,
-            Enabled = true,
+            Enabled = false,
         };
         _heartbeatTimer.Tick += HeartbeatTimerTick;
         _shutdownWindow = new ShutdownWindow(() => ExitAsync(confirmOnFailure: false));
@@ -42,23 +47,120 @@ internal sealed class TrayApplicationContext : ApplicationContext
             SetModeFromPanelAsync,
             SetDurationFromPanelAsync,
             LockAsync,
-            StartScreenSaverAsync,
-            () => ExitAsync(confirmOnFailure: true)));
+            StartScreenSaverAsync));
         _notifyIcon.MouseUp += NotifyIconMouseUp;
         _notifyIcon.Visible = true;
-        _ = RefreshOrRenewAsync(showError: false);
+        if (StartupRegistration.IsInstalledExecutable)
+        {
+            try
+            {
+                StartupRegistration.SetEnabled(settings.StartWithWindows);
+            }
+            catch (Exception exception)
+            {
+                TrayLog.Error("Failed to apply the startup preference.", exception);
+            }
+        }
+
+        ApplyVisualState();
     }
 
-    private void NotifyIconMouseUp(object? sender, MouseEventArgs eventArgs)
+    private async void NotifyIconMouseUp(object? sender, MouseEventArgs eventArgs)
     {
-        if (eventArgs.Button != MouseButtons.Right || _exiting)
+        if (_exiting)
         {
             return;
         }
 
+        if (eventArgs.Button == MouseButtons.Left)
+        {
+            ShowControlPanel();
+            return;
+        }
+
+        if (eventArgs.Button != MouseButtons.Right)
+        {
+            return;
+        }
+
+        try
+        {
+            switch (NativeTrayMenu.Show(_shutdownWindow.Handle, UiText.Current))
+            {
+                case NativeTrayMenu.Command.Settings:
+                    ShowSettings();
+                    break;
+                case NativeTrayMenu.Command.Exit:
+                    await ExitAsync(confirmOnFailure: true);
+                    break;
+            }
+        }
+        catch (Exception exception)
+        {
+            TrayLog.Error("The tray menu could not be opened.", exception);
+            ShowError(UiText.Current.TrayMenuFailed, exception);
+        }
+    }
+
+    private void ShowControlPanel()
+    {
         ApplyVisualState();
         _ = RefreshOrRenewAsync(showError: false);
         _popup.ShowAtCursor(CreatePopupState());
+    }
+
+    private void ShowSettings()
+    {
+        _popup.Hide();
+        _settingsForm ??= new SettingsForm(_settings, ApplySettings);
+        _settingsForm.ShowSettings(_settings);
+    }
+
+    private bool ApplySettings(TraySettings settings)
+    {
+        var startupChanged = settings.StartWithWindows != _settings.StartWithWindows;
+        try
+        {
+            if (startupChanged)
+            {
+                StartupRegistration.SetEnabled(settings.StartWithWindows);
+            }
+        }
+        catch (Exception exception)
+        {
+            TrayLog.Error("Failed to update the startup preference.", exception);
+            ShowError(UiText.Current.StartupUpdateFailed, exception);
+            return false;
+        }
+
+        try
+        {
+            TraySettingsStore.Save(settings);
+        }
+        catch (Exception exception)
+        {
+            if (startupChanged)
+            {
+                try
+                {
+                    StartupRegistration.SetEnabled(_settings.StartWithWindows);
+                }
+                catch (Exception rollbackException)
+                {
+                    TrayLog.Error("Failed to roll back the startup preference.", rollbackException);
+                }
+            }
+
+            TrayLog.Error("Failed to save tray settings.", exception);
+            ShowError(UiText.Current.SettingsSaveFailed, exception);
+            return false;
+        }
+
+        _settings = settings;
+        UiText.Use(settings.Language);
+        _popup.ApplyLocalization();
+        ApplyVisualState();
+        return true;
     }
 
     private Task SetModeFromPanelAsync(WakeMode mode)
@@ -123,7 +225,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
         catch (Exception exception)
         {
             TrayLog.Error("The workstation could not be locked.", exception);
-            ShowError("WakeGuard 无法锁定电脑。", exception);
+            ShowError(UiText.Current.LockFailed, exception);
         }
 
         return Task.CompletedTask;
@@ -138,7 +240,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
         catch (Exception exception)
         {
             TrayLog.Error("The screen saver could not be started.", exception);
-            ShowError("WakeGuard 无法启动屏幕保护程序。", exception);
+            ShowError(UiText.Current.ScreenSaverFailed, exception);
         }
 
         return Task.CompletedTask;
@@ -151,6 +253,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
             _desiredMode = WakeMode.Inactive;
             _stopAtUtc = null;
             _selectedDuration = null;
+            UpdateHeartbeatTimer();
         }
 
         await RunSerializedAsync(async () =>
@@ -161,6 +264,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
                 : await _client.UpsertLeaseAsync(_desiredMode, _stopAtUtc);
             EnsureSuccess(response);
             _serviceConnected = true;
+            UpdateHeartbeatTimer();
             ApplyVisualState(response);
         }, showError, skipIfBusy: true);
     }
@@ -187,7 +291,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
             TrayLog.Error("A tray operation failed.", exception);
             if (showError)
             {
-                ShowError("WakeGuard 没有完成操作。", exception);
+                ShowError(UiText.Current.OperationFailed, exception);
             }
         }
         finally
@@ -205,6 +309,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
 
         _exiting = true;
         _popup.Hide();
+        _settingsForm?.Hide();
         _heartbeatTimer.Stop();
         await _requestLock.WaitAsync();
         try
@@ -222,7 +327,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
             if (confirmOnFailure)
             {
                 var answer = MessageBox.Show(
-                    "后台服务暂时无法确认释放。即使继续退出，租约也会在最多 75 秒后自动失效。\n\n仍要退出吗？",
+                    UiText.Current.ReleaseFailedQuestion,
                     "WakeGuard",
                     MessageBoxButtons.YesNo,
                     MessageBoxIcon.Warning);
@@ -263,6 +368,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
             _desiredMode = requestedMode;
             _stopAtUtc = requestedMode == WakeMode.Inactive ? null : stopAtUtc;
             _serviceConnected = true;
+            UpdateHeartbeatTimer();
             return response;
         }
         catch
@@ -299,32 +405,37 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _displayRequest?.SetActive(false);
     }
 
+    private void UpdateHeartbeatTimer()
+    {
+        _heartbeatTimer.Enabled = !_exiting && _desiredMode != WakeMode.Inactive;
+    }
+
     private void ApplyVisualState(ServiceResponse? response = null)
     {
         TrayIconFactory.IconState iconState;
         if (!_serviceConnected)
         {
-            _statusText = "后台服务未连接";
+            _statusText = UiText.Current.StatusDisconnected;
             iconState = TrayIconFactory.IconState.Disconnected;
         }
         else if (_desiredMode == WakeMode.KeepAwakeAndDisplayOn)
         {
-            _statusText = "保持唤醒 · 屏幕常亮";
+            _statusText = UiText.Current.StatusDisplayOn;
             iconState = TrayIconFactory.IconState.DisplayOn;
         }
         else if (_desiredMode == WakeMode.KeepAwake)
         {
-            _statusText = "保持唤醒 · 屏幕由系统管理";
+            _statusText = UiText.Current.StatusKeepAwake;
             iconState = TrayIconFactory.IconState.KeepAwake;
         }
         else if (response?.EffectiveMode is WakeMode.KeepAwake or WakeMode.KeepAwakeAndDisplayOn)
         {
-            _statusText = "本程序未请求 · 其他用户正在保持唤醒";
+            _statusText = UiText.Current.StatusOtherUser;
             iconState = TrayIconFactory.IconState.Inactive;
         }
         else
         {
-            _statusText = "未保持唤醒";
+            _statusText = UiText.Current.StatusInactive;
             iconState = TrayIconFactory.IconState.Inactive;
         }
 
@@ -359,7 +470,8 @@ internal sealed class TrayApplicationContext : ApplicationContext
     {
         if (!response.Success)
         {
-            throw new InvalidOperationException(response.ErrorMessage ?? response.ErrorCode ?? "后台服务返回失败");
+            throw new InvalidOperationException(
+                response.ErrorMessage ?? response.ErrorCode ?? UiText.Current.ServiceFailure);
         }
     }
 
@@ -380,6 +492,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
         {
             _heartbeatTimer.Dispose();
             _popup.Dispose();
+            _settingsForm?.Dispose();
             _shutdownWindow.Dispose();
             _displayRequest?.Dispose();
             _notifyIcon.Dispose();
