@@ -1,104 +1,238 @@
 <div align="center">
   <img src="src/WakeGuard.Tray/Assets/WakeGuard.png" width="144" alt="WakeGuard icon">
   <h1>WakeGuard</h1>
-  <p>让 Windows 在锁屏或自动关闭显示器后继续工作。</p>
+  <p><strong>Keep Windows working after the display turns off or the session is locked.</strong></p>
+  <p>Windows 10/11 x64 | Lightweight native service | MIT licensed</p>
 </div>
 
-WakeGuard 是面向 Windows 10/11 x64 的轻量托盘程序。它阻止因用户空闲触发的睡眠或 Modern Standby，同时保留 Windows 原有的显示器关闭、自动锁屏、电源计划和合盖策略。
+WakeGuard is a small Windows tray application that prevents idle sleep and Modern
+Standby while still letting Windows manage the display, lock screen, power plan,
+and lid behavior.
 
-WakeGuard 不模拟鼠标或键盘，不定期制造“用户活动”，也不修改系统电源计划。它通过 Windows 官方 Power Request API 工作，并由低权限后台服务保证锁屏后的可靠性。
+It does not simulate mouse or keyboard input, periodically fake user activity, or
+rewrite the system power plan. WakeGuard uses the documented Windows Power Request
+API and a low-privilege background service so the request remains reliable after
+the interactive session is locked.
 
-## 功能
+## Highlights
 
-| 控制面板 | 系统保持唤醒 | 显示器保持点亮 | 额外操作 |
+- Three clear modes: **System default**, **Keep awake**, and **Keep screen on**.
+- Optional durations: unlimited, 30 minutes, 1 hour, 2 hours, or 4 hours.
+- One-click lock and screen-saver actions that do not change the active mode or timer.
+- A compact Windows 11-style left-click control panel.
+- A native right-click tray menu containing only **Settings** and **Exit**.
+- Per-user startup preference and a Chinese/English interface.
+- Reliable locked-session behavior through a `LocalService` Windows service.
+- Demand-start service activation through a native named-pipe service trigger.
+- Automatic lease expiry and idle service shutdown, so no service remains resident
+  when WakeGuard is inactive.
+
+## How to use it
+
+### Left-click: wake controls
+
+Left-click the tray icon to open the control panel. Selecting a mode or duration
+does not close the panel, so the normal workflow can be completed with a few clicks.
+
+| Mode | Keeps the system awake | Keeps the display on | Behavior |
 | --- | :---: | :---: | --- |
-| **保持唤醒** | 是 | 否 | 显示器关闭和自动锁屏仍由 Windows 管理 |
-| **保持唤醒 · 屏幕常亮** | 是 | 是 | 阻止显示器因空闲关闭 |
-| **保持唤醒 · 立刻锁屏** | 是 | 否 | 服务确认唤醒成功后锁定工作站 |
-| **保持唤醒 · 播放屏保** | 是 | 否 | 启动当前屏保；未配置时使用 Windows 黑屏屏保 |
-| **退出唤醒状态** | 否 | 否 | 释放请求，但保留托盘程序 |
-| **定时退出唤醒状态** | 取决于当前模式 | 取决于当前模式 | 支持 30 分钟、1、2 或 4 小时 |
+| **System default** | No | No | Releases WakeGuard's power requests and returns control to Windows. |
+| **Keep awake** | Yes | No | Background work continues; display timeout and automatic locking still follow Windows settings. |
+| **Keep screen on** | Yes | Yes | Keeps both the system and display awake. |
 
-托盘图标也会显示当前状态：灰白色为未唤醒，黄色为保持唤醒，橙红色为保持唤醒且屏幕常亮。
+After selecting an active mode, choose a duration:
 
-左键单击托盘图标打开唤醒控制面板；右键菜单提供设置和退出。设置页可控制当前用户登录后是否自动启动 WakeGuard、在中文和英文之间切换界面语言，并显示版本与关于信息。
+- **Unlimited**
+- **30 min**
+- **1 hour**
+- **2 hours**
+- **4 hours**
 
-> 播放屏保并不自动锁屏。恢复时是否要求登录，取决于 Windows 的“在恢复时显示登录屏幕”设置。普通程序也无法在已经锁定的安全桌面上继续覆盖播放第三方屏保。
+The panel shows the remaining time and the local end time. When the timer expires,
+WakeGuard releases its requests and returns to **System default**. Timer expiry does
+not initiate sleep, hibernation, shutdown, locking, or any other action; Windows
+simply resumes applying its own power policy.
 
-## 快速开始
+The bottom row contains two immediate actions:
 
-### 安装
+- **Lock computer** locks the current workstation.
+- **Start screen saver** starts the configured screen saver, or the built-in blank
+  screen saver when no custom screen saver is configured.
 
-1. 获取 `WakeGuard-<version>-win-x64.msi`。本地构建位于 `artifacts\installer`。
-2. 双击 MSI，并接受 Windows 的管理员权限提示。管理员权限只用于安装服务和写入 `Program Files`。
-3. 安装结束后，从开始菜单启动一次 **WakeGuard**。以后每次登录 Windows，托盘程序都会自动启动。
-4. 在任务栏通知区域左键单击 WakeGuard 杯子图标，选择需要的模式；右键可打开设置或退出。
+These actions do not change the selected wake mode or duration. Starting a screen
+saver also does not automatically lock Windows; whether credentials are required
+on resume depends on the Windows screen-saver settings.
 
-当前构建尚未进行 Authenticode 代码签名，因此 Windows 可能显示“未知发布者”。在正式对外发布前应使用可信证书签名 MSI 和两个 EXE。
+### Right-click: application menu
 
-### 升级
+Right-click the tray icon to open a native Windows menu:
 
-直接运行版本号更高的 MSI。安装器会关闭旧托盘、停止服务并更新文件；后台服务会在托盘下次请求命名管道时由 Windows 自动启动。升级后如托盘未立即出现，从开始菜单启动 WakeGuard 即可。
+- **Settings...** opens the settings window.
+- **Exit** releases this user's active request and closes the tray application.
 
-### 卸载
+### Settings
 
-在 Windows **设置 → 应用 → 已安装的应用** 中卸载 WakeGuard。卸载器会先停止服务并清除 Power Request，不需要手工恢复电源计划。
+The settings window contains:
 
-## 工作原理
+- **Start with Windows**: creates or removes the current user's
+  `HKCU\Software\Microsoft\Windows\CurrentVersion\Run\WakeGuard` value.
+- **Language**: switches the tray UI immediately between Chinese and English.
+- **About**: displays the installed product version and application information.
+
+Settings are stored per user in `%LOCALAPPDATA%\WakeGuard\settings.json`. A fresh
+installation defaults to starting WakeGuard when the current user signs in.
+
+## Installation
+
+1. Download the current `WakeGuard-<version>-win-x64.msi` from
+   [GitHub Releases](https://github.com/su27/wakeguard/releases).
+2. Run the MSI and approve the administrator prompt. Elevation is required only to
+   install the service and write files under `Program Files`.
+3. Start **WakeGuard** from the Start menu.
+4. Left-click its notification-area icon to select a wake mode. Right-click it to
+   open Settings or exit.
+
+Release binaries are self-contained; the .NET runtime does not need to be installed
+separately.
+
+> WakeGuard is not currently Authenticode-signed. Windows may therefore show an
+> "Unknown publisher" warning. Always download the installer from this repository's
+> Releases page and verify its published checksum when one is provided.
+
+### Upgrade
+
+Run a newer MSI directly. Windows Installer closes the old tray process, stops the
+service, replaces the installed files, and preserves the per-user settings. The
+service remains stopped until the tray next requests an active wake mode.
+
+### Uninstall
+
+Remove WakeGuard from **Settings > Apps > Installed apps**. The installer stops and
+removes the service and releases its power requests. WakeGuard never edits the
+Windows power plan, so no power-plan restoration is required.
+
+## What WakeGuard does and does not prevent
+
+WakeGuard is designed to prevent sleep caused by user inactivity. While an active
+mode is confirmed, it works on both AC power and battery power and remains effective
+after the workstation is locked or the display turns off.
+
+It intentionally does not override explicit or higher-priority system actions,
+including:
+
+- selecting **Sleep**, **Hibernate**, **Restart**, or **Shut down**;
+- pressing a power or sleep button configured to sleep the computer;
+- closing a laptop lid configured to sleep or hibernate;
+- critical-battery hibernation;
+- thermal protection, firmware policy, administrator policy, or update restarts.
+
+This distinction is deliberate: WakeGuard keeps unattended work running, but it
+does not fight an explicit user or system decision to suspend the machine.
+
+## How it works
 
 ```mermaid
 flowchart LR
-    A["WakeGuard.Tray<br>当前用户会话"] -->|"版本化命名管道<br>激活时 20 秒心跳"| B["WakeGuard.Service<br>LocalService / Session 0<br>管道触发启动"]
-    B --> C["SystemRequired<br>ExecutionRequired"]
-    A --> D["DisplayRequired<br>仅屏幕常亮模式"]
-    C --> E["Windows Power Request API"]
-    D --> E
+    T["WakeGuard.Tray<br/>Interactive user session"]
+    S["WakeGuard.Service<br/>LocalService / Session 0"]
+    P["Windows Power Request API"]
+    W["Lock and screen-saver APIs"]
+
+    T -->|"Versioned named pipe<br/>20-second heartbeat while active"| S
+    S -->|"SystemRequired<br/>ExecutionRequired"| P
+    T -->|"DisplayRequired<br/>Keep screen on only"| P
+    T --> W
 ```
 
-- `WakeGuard.Tray.exe` 负责菜单、状态图标、锁屏、屏保，以及屏幕常亮模式所需的 `PowerRequestDisplayRequired`。它运行在交互会话中，不请求管理员权限。
-- `WakeGuard.Service.exe` 以 `NT AUTHORITY\LocalService` 运行，持有 `PowerRequestSystemRequired` 和 `PowerRequestExecutionRequired`。因此切换到锁屏安全桌面后，系统级唤醒请求仍然存在。
-- Windows 不支持 Session 0 服务设置 `DisplayRequired`，所以显示请求必须由托盘进程持有；托盘退出或崩溃后，该句柄会被 Windows 自动释放。
+### Tray process
 
-托盘仅在启用唤醒后向服务申请短期租约，并每 20 秒续租。服务在 75 秒内收不到心跳就自动释放对应请求。没有有效租约时，服务等待 30 秒安静期后退出；下一次管道请求会通过 Windows Service Trigger 自动启动它。多个 Windows 用户同时登录时，每个用户的租约互相隔离，系统采用所有有效租约中最强的模式。
+`WakeGuard.Tray.exe` owns the user interface, tray icon, lock and screen-saver
+commands, per-user settings, and the `DisplayRequired` request used by **Keep screen
+on**. It runs without elevation in the interactive user session.
 
-更完整的进程、IPC、安全和失败恢复设计见 [架构文档](docs/architecture.md)。
+### Background service
 
-## 验证运行状态
+`WakeGuard.Service.exe` runs as `NT AUTHORITY\LocalService` and owns the
+`SystemRequired` and `ExecutionRequired` requests. Keeping those requests in a
+service allows them to survive the transition to the locked secure desktop.
 
-启用模式后，在管理员 PowerShell 中运行：
+The service is configured as **demand start**, not automatic start. Windows starts
+it through the registered `WakeGuard.Service.v1` named-pipe trigger when the tray
+first needs it. With no leases or power requests, the service waits through a
+30-second quiet period and exits normally. The next pipe connection starts it again.
+
+The service is Native AOT compiled to minimize its runtime footprint. When no wake
+mode is active, the service consumes no memory because it is not running.
+
+### Leases and failure recovery
+
+Each tray instance creates a per-user lease and renews it every 20 seconds while a
+wake mode is active. A lease expires if the service receives no heartbeat for 75
+seconds. This guarantees that a crashed, killed, or signed-out tray cannot leave a
+permanent machine-wide power request behind.
+
+Multiple signed-in Windows users have independent leases. The service applies the
+strongest unexpired request, so one user exiting cannot cancel another user's active
+mode. A reboot always starts inactive and never silently restores the previous mode.
+
+For the complete process, IPC, security, and failure model, see
+[docs/architecture.md](docs/architecture.md).
+
+## Verify the active requests
+
+With a wake mode enabled, run the following command in an elevated PowerShell or
+Command Prompt:
 
 ```powershell
 powercfg /requests
 ```
 
-预期结果：
+Expected WakeGuard entries:
 
-| 当前模式 | `DISPLAY` | `SYSTEM` | `EXECUTION` |
+| Mode | `DISPLAY` | `SYSTEM` | `EXECUTION` |
 | --- | --- | --- | --- |
-| 未保持唤醒 | 无 WakeGuard | 无 WakeGuard | 无 WakeGuard |
-| 保持唤醒 | 无 WakeGuard | `WakeGuard.Service.exe` | `WakeGuard.Service.exe` |
-| 保持唤醒 · 屏幕常亮 | `WakeGuard.Tray.exe` | `WakeGuard.Service.exe` | `WakeGuard.Service.exe` |
+| System default | None | None | None |
+| Keep awake | None | `WakeGuard.Service.exe` | `WakeGuard.Service.exe` |
+| Keep screen on | `WakeGuard.Tray.exe` | `WakeGuard.Service.exe` | `WakeGuard.Service.exe` |
 
-也可以检查服务：
+Inspect the service and its trigger with:
 
 ```powershell
 Get-Service WakeGuard
 sc.exe qc WakeGuard
+sc.exe qtriggerinfo WakeGuard
 ```
 
-服务账户应为 `NT AUTHORITY\LocalService`，启动类型为按需（Trigger Start）。未保持唤醒时服务可以是 `Stopped`；启用任一唤醒模式后应自动变为 `Running`。
+The service account should be `NT AUTHORITY\LocalService`, and the start type should
+be demand/trigger start. It is normal for the service to show `Stopped` while the
+application is in **System default** mode.
 
-## 故障排查
+## Security model
 
-### 托盘图标没有出现
+- The service runs as low-privilege `LocalService`, not `LocalSystem` or an
+  administrator account.
+- The named pipe has an explicit ACL and rejects anonymous and network-logon tokens.
+- The service impersonates each pipe client to obtain its real Windows SID; it does
+  not trust identity data supplied in JSON.
+- IPC uses a four-byte length prefix and rejects payloads larger than 16 KiB before
+  JSON deserialization.
+- Display and system requests are handle-bound or lease-bound and are automatically
+  released after process failure.
+- No remote control endpoint is exposed, and no input simulation is used.
 
-- 检查任务栏通知区域的折叠菜单。
-- 从开始菜单重新启动 WakeGuard。程序会阻止同一用户会话重复运行多个托盘实例。
-- 检查 `%LOCALAPPDATA%\WakeGuard\tray.log`。
+## Troubleshooting
 
-### 显示“后台服务未连接”
+### The tray icon is missing
 
-先重新点击一次唤醒模式；正常情况下，命名管道请求会自动启动服务。如果仍然失败，可在管理员 PowerShell 中检查并手工启动服务：
+- Check the notification area's overflow menu.
+- Start WakeGuard again from the Start menu. Only one tray instance is allowed per
+  user session.
+- Review `%LOCALAPPDATA%\WakeGuard\tray.log`.
+
+### The panel reports that the service is unavailable
+
+Select a wake mode again. The named-pipe connection should automatically trigger the
+service. If it still fails, use an elevated PowerShell window:
 
 ```powershell
 Get-Service WakeGuard
@@ -106,67 +240,37 @@ Start-Service WakeGuard
 Get-Content C:\ProgramData\WakeGuard\service.log -Tail 100
 ```
 
-如果服务不存在或文件损坏，重新运行当前 MSI 并选择修复，或者先卸载后重新安装。
+If the service is missing or its files are damaged, repair the current MSI or
+uninstall and reinstall WakeGuard.
 
-### 显示器关闭后电脑仍然睡眠
+### The computer still sleeps after the display turns off
 
-1. 用 `powercfg /requests` 确认 `SYSTEM` 和 `EXECUTION` 中存在 `WakeGuard.Service.exe`。
-2. 用 `powercfg /a` 查看机器实际支持的睡眠模型。
-3. 检查厂商电源管理软件、组策略、低电量策略和合盖策略是否主动触发睡眠或休眠。
+1. Confirm that `WakeGuard.Service.exe` appears under both `SYSTEM` and `EXECUTION`
+   in `powercfg /requests`.
+2. Run `powercfg /a` to identify the sleep model supported by the computer.
+3. Check OEM power utilities, Group Policy, battery policy, and lid settings for an
+   explicit sleep or hibernate action.
 
-WakeGuard 只阻止“用户空闲”导致的自动睡眠。它不会阻止用户主动点击睡眠、关机或重启，也不会覆盖合盖、低电量休眠、过热保护、系统更新重启和固件级策略。
+WakeGuard can block idle sleep but cannot override every explicit platform policy.
 
-### 屏幕常亮时报 `PowerSetRequest(DisplayRequired) failed`
-
-升级到 `0.1.1` 或更高版本。旧实现曾尝试从 Session 0 服务设置 `DisplayRequired`，部分 Windows 设备会返回错误 50。当前版本由交互会话中的托盘进程持有显示请求。
-
-### 日志位置
+### Log files
 
 ```text
 C:\ProgramData\WakeGuard\service.log
 %LOCALAPPDATA%\WakeGuard\tray.log
 ```
 
-日志写入失败不会改变或中断 Power Request。当前日志尚未实现自动轮转；长时间部署时需要关注文件大小。
+Logging failures do not interrupt or change an active Power Request.
 
-## 安全与恢复设计
+## Development
 
-- 后台服务使用低权限 `LocalService`，不以 `LocalSystem` 或用户管理员身份运行。
-- 命名管道带有显式 ACL，不接受匿名或网络登录令牌。
-- 服务通过管道客户端模拟读取真实 Windows SID，不信任客户端 JSON 中自报的身份。
-- IPC 使用 4 字节长度前缀，并在反序列化前限制为 16 KiB。
-- 托盘崩溃或被强制结束后，租约最多 75 秒失效；显示请求则随进程句柄立即释放。
-- 服务崩溃后由 Service Control Manager 自动重启，托盘会在下一次心跳重建租约。
-- 服务没有有效租约时会正常退出；这不是崩溃，也不会触发失败重启。
-- 重启电脑后始终从未唤醒状态开始，不会悄悄恢复上次模式。
+### Requirements
 
-## 开发
+- Windows 10 or Windows 11 x64
+- .NET 10 SDK `10.0.302` (the SDK feature band is pinned in [global.json](global.json))
+- Network access for restoring .NET and WiX Toolset 5 packages
 
-### 环境要求
-
-- Windows 10/11 x64
-- .NET 10 SDK `10.0.302`；[global.json](global.json) 固定了 SDK 功能带
-- 构建 MSI 时需要联网还原 WiX Toolset 5 NuGet 包
-
-### 目录结构
-
-```text
-assets/icon-source/        原始 normal、awake、light 状态图
-docs/                      架构和手工测试文档
-installer/                 WiX 5 MSI 工程
-scripts/Build.ps1          完整发布构建入口
-src/WakeGuard.Contracts/   版本化 IPC 消息和有限长度帧
-src/WakeGuard.Core/        与平台无关的租约状态机
-src/WakeGuard.Service/     LocalService Windows Service
-src/WakeGuard.Tray/        WinForms 托盘和交互会话功能
-src/WakeGuard.Windows/     Power Request、命名管道和 Windows API 封装
-tests/                     核心与 Windows 集成测试
-tools/WakeGuard.IconGenerator/  多尺寸 PNG/ICO 生成器
-```
-
-`bin`、`obj`、`artifacts` 和用户本地 IDE 文件都在 [.gitignore](.gitignore) 中。版本号只在 [Directory.Build.props](Directory.Build.props) 中维护，应用和 MSI 会继承同一个值。
-
-### 构建与测试
+### Build and test
 
 ```powershell
 dotnet restore .\WakeGuard.slnx
@@ -174,22 +278,20 @@ dotnet build .\WakeGuard.slnx --configuration Release --no-restore
 dotnet test .\WakeGuard.slnx --configuration Release --no-build
 ```
 
-主解决方案故意不包含安装器，因此全新克隆后可以先构建和测试应用，不要求已有发布目录。
+The main solution intentionally excludes the installer, so application builds and
+tests do not depend on an existing publish directory.
 
-完整发布构建：
+Run the complete release build with:
 
 ```powershell
 .\scripts\Build.ps1
 ```
 
-发布脚本会依次：
+The script regenerates icon assets, runs all automated tests, publishes the
+self-contained tray executable and Native AOT service, and builds a high-compression
+WiX MSI.
 
-1. 从 `assets\icon-source` 重新生成应用和托盘图标；
-2. 运行全部自动测试；
-3. 发布自包含、单文件的 `win-x64` 托盘 EXE，以及低内存 Native AOT 服务 EXE；
-4. 使用 WiX Toolset 5 生成高压缩 MSI。
-
-输出位于：
+Build output is written to:
 
 ```text
 artifacts\publish\win-x64\Tray\
@@ -197,18 +299,37 @@ artifacts\publish\win-x64\Service\
 artifacts\installer\WakeGuard-<version>-win-x64.msi
 ```
 
-详细测试矩阵见 [docs/testing.md](docs/testing.md)。
+The product version has a single source of truth in
+[Directory.Build.props](Directory.Build.props). See [docs/testing.md](docs/testing.md)
+for the automated and manual validation matrix.
 
-### 图标资源
+### Repository layout
 
-三张原始状态图保存在 `assets\icon-source`。生成器会输出三种状态的 `16/20/24/32/48/64px` 托盘 ICO、预览 PNG，以及包含到 `256px` 的程序图标。`awake.png` 是程序主图标来源。
+```text
+assets/icon-source/             Source artwork for the three tray states
+docs/                           Architecture and manual testing documentation
+installer/                      WiX 5 MSI project
+scripts/Build.ps1               Full release build entry point
+src/WakeGuard.Contracts/        Versioned IPC messages and bounded framing
+src/WakeGuard.Core/             Platform-independent lease state machine
+src/WakeGuard.Service/          LocalService Windows service
+src/WakeGuard.Tray/             WinForms tray application and settings UI
+src/WakeGuard.Windows/          Power Request, named-pipe, and Windows API adapters
+tests/                          Core and Windows integration tests
+tools/WakeGuard.IconGenerator/  Multi-size PNG and ICO generator
+```
 
-不要手工编辑 `src\WakeGuard.Tray\Assets` 下的生成文件；修改源图或生成器后，运行：
+### Icon assets
+
+The three source-state images are stored in `assets/icon-source`. To regenerate the
+application and tray icons after changing the artwork or generator, run:
 
 ```powershell
 dotnet run --project .\tools\WakeGuard.IconGenerator\WakeGuard.IconGenerator.csproj --configuration Release -- .\assets\icon-source .\src\WakeGuard.Tray\Assets
 ```
 
-## 许可证
+Do not edit generated files under `src/WakeGuard.Tray/Assets` by hand.
 
-[MIT License](LICENSE)
+## License
+
+WakeGuard is available under the [MIT License](LICENSE).
