@@ -31,6 +31,9 @@ the interactive session is locked.
 
 ### Left-click: wake controls
 
+<img width="400" alt="image" src="https://github.com/user-attachments/assets/82cfcbca-1502-457e-8b4f-e7b1452efc02" />
+
+
 Left-click the tray icon to open the control panel. Selecting a mode or duration
 does not close the panel, so the normal workflow can be completed with a few clicks.
 
