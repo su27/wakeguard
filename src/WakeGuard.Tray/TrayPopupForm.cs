@@ -20,6 +20,8 @@ internal sealed class TrayPopupForm : Form
     private readonly Actions _actions;
     private readonly PictureBox _appIcon;
     private readonly Label _statusLabel;
+    private readonly HeaderIconButton _settingsButton;
+    private readonly HeaderIconButton _exitButton;
     private readonly Panel _headerDivider;
     private readonly Label _modeHeading;
     private readonly PopupButton _inactiveButton;
@@ -32,6 +34,7 @@ internal sealed class TrayPopupForm : Form
     private readonly HelpIconButton _actionHelpButton;
     private readonly PopupButton _lockButton;
     private readonly PopupButton _screenSaverButton;
+    private readonly ToolTip _headerActionTip;
     private readonly ToolTip _actionHelpTip;
     private readonly Timer _countdownTimer;
     private readonly Timer _pendingFeedbackTimer;
@@ -48,7 +51,9 @@ internal sealed class TrayPopupForm : Form
         Func<WakeMode, Task> SetModeAsync,
         Func<TimeSpan?, Task> SetDurationAsync,
         Func<Task> LockAsync,
-        Func<Task> StartScreenSaverAsync);
+        Func<Task> StartScreenSaverAsync,
+        Action ShowSettings,
+        Func<Task> ExitAsync);
 
     internal readonly record struct State(
         string StatusText,
@@ -87,6 +92,21 @@ internal sealed class TrayPopupForm : Form
             TabStop = false,
         };
         _statusLabel = CreateLabel(UiText.Current.PopupConnecting, 10F);
+        _settingsButton = CreateHeaderButton(HeaderIconButton.IconKind.Settings);
+        _exitButton = CreateHeaderButton(HeaderIconButton.IconKind.Exit);
+        _settingsButton.Click += (_, _) =>
+        {
+            Hide();
+            _actions.ShowSettings();
+        };
+        _exitButton.Click += async (_, _) => await _actions.ExitAsync();
+        _headerActionTip = new ToolTip
+        {
+            AutoPopDelay = 5_000,
+            InitialDelay = 400,
+            ReshowDelay = 100,
+            ShowAlways = true,
+        };
         _headerDivider = new Panel
         {
             Dock = DockStyle.Top,
@@ -142,15 +162,19 @@ internal sealed class TrayPopupForm : Form
         var header = new TableLayoutPanel
         {
             BackColor = Color.Transparent,
-            ColumnCount = 2,
+            ColumnCount = 4,
             Dock = DockStyle.Fill,
             Margin = Padding.Empty,
             RowCount = 1,
         };
         header.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 32));
         header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        header.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 38));
+        header.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 38));
         header.Controls.Add(_appIcon, 0, 0);
         header.Controls.Add(_statusLabel, 1, 0);
+        header.Controls.Add(_settingsButton, 2, 0);
+        header.Controls.Add(_exitButton, 3, 0);
 
         var modeButtons = CreateButtonRow(_inactiveButton, _keepAwakeButton, _displayOnButton);
         var durationButtons = CreateButtonRow([_unlimitedButton, .. _durationButtons.Keys]);
@@ -291,6 +315,10 @@ internal sealed class TrayPopupForm : Form
 
         _actionHeading.Text = text.ActionHeading;
         _actionHelpButton.AccessibleDescription = text.ActionHelpAccessible;
+        _settingsButton.AccessibleName = text.MenuSettings;
+        _exitButton.AccessibleName = text.MenuExit;
+        _headerActionTip.SetToolTip(_settingsButton, text.MenuSettings);
+        _headerActionTip.SetToolTip(_exitButton, text.MenuExit);
         _lockButton.Text = text.LockComputer;
         _screenSaverButton.Text = text.StartScreenSaver;
         _lockButton.AccessibleDescription = text.LockComputerDescription;
@@ -321,6 +349,17 @@ internal sealed class TrayPopupForm : Form
             Dock = DockStyle.Fill,
             Font = new Font(Font.FontFamily, 9F, FontStyle.Regular, GraphicsUnit.Point),
             Text = text,
+        };
+        button.ApplyPalette(_palette);
+        return button;
+    }
+
+    private HeaderIconButton CreateHeaderButton(HeaderIconButton.IconKind icon)
+    {
+        var button = new HeaderIconButton(icon)
+        {
+            Dock = DockStyle.Fill,
+            Margin = new Padding(3, 8, 3, 8),
         };
         button.ApplyPalette(_palette);
         return button;
@@ -593,6 +632,8 @@ internal sealed class TrayPopupForm : Form
         _modeHeading.ForeColor = _palette.Text;
         _durationHeading.ForeColor = _palette.Text;
         _actionHeading.ForeColor = _palette.Text;
+        _settingsButton.ApplyPalette(_palette);
+        _exitButton.ApplyPalette(_palette);
         _actionHelpButton.ApplyPalette(_palette);
         foreach (var button in GetButtons())
         {
@@ -696,6 +737,7 @@ internal sealed class TrayPopupForm : Form
         {
             _countdownTimer.Dispose();
             _pendingFeedbackTimer.Dispose();
+            _headerActionTip.Dispose();
             _actionHelpTip.Dispose();
             _appIcon.Image = null;
             _appIconImage?.Dispose();
@@ -883,6 +925,196 @@ internal sealed class TrayPopupForm : Form
             if (eventArgs.KeyCode is Keys.Space or Keys.Enter)
             {
                 eventArgs.Handled = true;
+                OnClick(EventArgs.Empty);
+            }
+
+            base.OnKeyUp(eventArgs);
+        }
+
+        protected override bool IsInputKey(Keys keyData)
+        {
+            return (keyData & Keys.KeyCode) is Keys.Space or Keys.Enter || base.IsInputKey(keyData);
+        }
+    }
+
+    private sealed class HeaderIconButton : Control
+    {
+        internal enum IconKind
+        {
+            Settings,
+            Exit,
+        }
+
+        private readonly IconKind _icon;
+        private Palette _palette;
+        private bool _mouseOver;
+        private bool _mouseDown;
+
+        internal HeaderIconButton(IconKind icon)
+        {
+            _icon = icon;
+            AccessibleRole = AccessibleRole.PushButton;
+            Cursor = Cursors.Hand;
+            SetStyle(
+                ControlStyles.AllPaintingInWmPaint |
+                ControlStyles.OptimizedDoubleBuffer |
+                ControlStyles.ResizeRedraw |
+                ControlStyles.Selectable |
+                ControlStyles.StandardClick |
+                ControlStyles.UserPaint,
+                true);
+            TabStop = true;
+        }
+
+        internal void ApplyPalette(Palette palette)
+        {
+            _palette = palette;
+            BackColor = palette.Background;
+            ForeColor = palette.Text;
+            Invalidate();
+        }
+
+        protected override void OnPaintBackground(PaintEventArgs eventArgs)
+        {
+            eventArgs.Graphics.Clear(_palette.Background);
+        }
+
+        protected override void OnPaint(PaintEventArgs eventArgs)
+        {
+            var graphics = eventArgs.Graphics;
+            graphics.SmoothingMode = SmoothingMode.AntiAlias;
+
+            var buttonBounds = new RectangleF(0.5F, 0.5F, Width - 1F, Height - 1F);
+            if (_mouseOver || _mouseDown)
+            {
+                using var backgroundPath = RoundedRectangle.Create(buttonBounds, 6F);
+                var background = _mouseDown
+                    ? Palette.Blend(_palette.SurfaceHover, _palette.Background, 0.72F)
+                    : _palette.SurfaceHover;
+                using var brush = new SolidBrush(background);
+                graphics.FillPath(brush, backgroundPath);
+            }
+
+            var iconColor = _mouseOver ? _palette.Text : _palette.SecondaryText;
+            using var pen = new Pen(iconColor, 1.65F)
+            {
+                StartCap = LineCap.Round,
+                EndCap = LineCap.Round,
+                LineJoin = LineJoin.Round,
+            };
+            if (_icon == IconKind.Settings)
+            {
+                DrawSettingsIcon(graphics, pen);
+            }
+            else
+            {
+                DrawExitIcon(graphics, pen);
+            }
+
+            if (Focused && ShowFocusCues)
+            {
+                ControlPaint.DrawFocusRectangle(
+                    graphics,
+                    Rectangle.Inflate(Rectangle.Round(buttonBounds), -3, -3),
+                    iconColor,
+                    _palette.Background);
+            }
+        }
+
+        private void DrawSettingsIcon(Graphics graphics, Pen pen)
+        {
+            var center = new PointF(Width / 2F, Height / 2F);
+            const float innerRadius = 3F;
+            const float bodyRadius = 6F;
+            const float toothRadius = 8.5F;
+            graphics.DrawEllipse(
+                pen,
+                center.X - bodyRadius,
+                center.Y - bodyRadius,
+                bodyRadius * 2F,
+                bodyRadius * 2F);
+            graphics.DrawEllipse(
+                pen,
+                center.X - innerRadius,
+                center.Y - innerRadius,
+                innerRadius * 2F,
+                innerRadius * 2F);
+            for (var index = 0; index < 8; index++)
+            {
+                var angle = index * MathF.PI / 4F;
+                graphics.DrawLine(
+                    pen,
+                    center.X + (MathF.Cos(angle) * bodyRadius),
+                    center.Y + (MathF.Sin(angle) * bodyRadius),
+                    center.X + (MathF.Cos(angle) * toothRadius),
+                    center.Y + (MathF.Sin(angle) * toothRadius));
+            }
+        }
+
+        private void DrawExitIcon(Graphics graphics, Pen pen)
+        {
+            var centerX = Width / 2F;
+            var centerY = Height / 2F;
+            graphics.DrawLine(pen, centerX, centerY - 9F, centerX, centerY - 1F);
+            graphics.DrawArc(
+                pen,
+                centerX - 8F,
+                centerY - 7F,
+                16F,
+                16F,
+                -48F,
+                276F);
+        }
+
+        protected override void OnMouseEnter(EventArgs eventArgs)
+        {
+            _mouseOver = true;
+            Invalidate();
+            base.OnMouseEnter(eventArgs);
+        }
+
+        protected override void OnMouseLeave(EventArgs eventArgs)
+        {
+            _mouseOver = false;
+            _mouseDown = false;
+            Invalidate();
+            base.OnMouseLeave(eventArgs);
+        }
+
+        protected override void OnMouseDown(MouseEventArgs eventArgs)
+        {
+            Focus();
+            _mouseDown = eventArgs.Button == MouseButtons.Left;
+            Invalidate();
+            base.OnMouseDown(eventArgs);
+        }
+
+        protected override void OnMouseUp(MouseEventArgs eventArgs)
+        {
+            _mouseDown = false;
+            Invalidate();
+            base.OnMouseUp(eventArgs);
+        }
+
+        protected override void OnKeyDown(KeyEventArgs eventArgs)
+        {
+            if (eventArgs.KeyCode is Keys.Space or Keys.Enter)
+            {
+                _mouseDown = true;
+                eventArgs.Handled = true;
+                Invalidate();
+            }
+
+            base.OnKeyDown(eventArgs);
+        }
+
+        protected override void OnKeyUp(KeyEventArgs eventArgs)
+        {
+            if (_mouseDown && eventArgs.KeyCode is Keys.Space or Keys.Enter)
+            {
+                _mouseDown = false;
+                eventArgs.Handled = true;
+                Invalidate();
                 OnClick(EventArgs.Empty);
             }
 

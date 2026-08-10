@@ -78,7 +78,6 @@ internal sealed record UiText
     internal required string Close { get; init; }
     internal required string StartupUpdateFailed { get; init; }
     internal required string SettingsSaveFailed { get; init; }
-    internal required string TrayMenuFailed { get; init; }
 
     internal static void Use(UiLanguage language) => _current = Create(language);
 
@@ -159,7 +158,6 @@ internal sealed record UiText
         Close = "关闭",
         StartupUpdateFailed = "无法更新开机启动设置。",
         SettingsSaveFailed = "无法保存 WakeGuard 设置。",
-        TrayMenuFailed = "无法打开托盘菜单。",
     };
 
     private static UiText CreateEnglish() => new()
@@ -228,6 +226,5 @@ internal sealed record UiText
         Close = "Close",
         StartupUpdateFailed = "Could not update the startup setting.",
         SettingsSaveFailed = "Could not save WakeGuard settings.",
-        TrayMenuFailed = "Could not open the tray menu.",
     };
 }

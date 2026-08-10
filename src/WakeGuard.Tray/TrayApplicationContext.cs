@@ -47,7 +47,9 @@ internal sealed class TrayApplicationContext : ApplicationContext
             SetModeFromPanelAsync,
             SetDurationFromPanelAsync,
             LockAsync,
-            StartScreenSaverAsync));
+            StartScreenSaverAsync,
+            ShowSettings,
+            () => ExitAsync(confirmOnFailure: true)));
         _notifyIcon.MouseUp += NotifyIconMouseUp;
         _notifyIcon.Visible = true;
         if (StartupRegistration.IsInstalledExecutable)
@@ -65,40 +67,16 @@ internal sealed class TrayApplicationContext : ApplicationContext
         ApplyVisualState();
     }
 
-    private async void NotifyIconMouseUp(object? sender, MouseEventArgs eventArgs)
+    private void NotifyIconMouseUp(object? sender, MouseEventArgs eventArgs)
     {
         if (_exiting)
         {
             return;
         }
 
-        if (eventArgs.Button == MouseButtons.Left)
+        if (eventArgs.Button is MouseButtons.Left or MouseButtons.Right)
         {
             ShowControlPanel();
-            return;
-        }
-
-        if (eventArgs.Button != MouseButtons.Right)
-        {
-            return;
-        }
-
-        try
-        {
-            switch (NativeTrayMenu.Show(_shutdownWindow.Handle, UiText.Current))
-            {
-                case NativeTrayMenu.Command.Settings:
-                    ShowSettings();
-                    break;
-                case NativeTrayMenu.Command.Exit:
-                    await ExitAsync(confirmOnFailure: true);
-                    break;
-            }
-        }
-        catch (Exception exception)
-        {
-            TrayLog.Error("The tray menu could not be opened.", exception);
-            ShowError(UiText.Current.TrayMenuFailed, exception);
         }
     }
 

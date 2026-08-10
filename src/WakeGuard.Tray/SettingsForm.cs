@@ -40,6 +40,7 @@ internal sealed class SettingsForm : Form
         AutoScaleDimensions = new SizeF(96F, 96F);
         AutoScaleMode = AutoScaleMode.Dpi;
         ClientSize = new Size(600, 550);
+        DoubleBuffered = true;
         Font = new Font("Segoe UI Variable Text", 9.5F, FontStyle.Regular, GraphicsUnit.Point);
         FormBorderStyle = FormBorderStyle.FixedDialog;
         Icon = _windowIcon;
@@ -99,15 +100,30 @@ internal sealed class SettingsForm : Form
 
     internal void ShowSettings(TraySettings settings)
     {
-        ApplySettings(settings);
-        ApplyLocalization();
-        ApplyTheme();
-        if (!Visible)
+        SuspendLayout();
+        try
         {
-            Show();
+            ApplySettings(settings);
+            ApplyLocalization();
+            ApplyTheme();
+        }
+        finally
+        {
+            ResumeLayout(performLayout: true);
         }
 
         WindowState = FormWindowState.Normal;
+        if (!Visible)
+        {
+            // Create the native window, apply its DWM theme, and paint a complete
+            // first frame while transparent so the default dialog never flashes.
+            Opacity = 0;
+            Show();
+            PerformLayout();
+            Refresh();
+            Opacity = 1;
+        }
+
         Activate();
         BringToFront();
     }
