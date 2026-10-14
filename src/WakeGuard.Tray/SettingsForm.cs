@@ -12,6 +12,8 @@ internal sealed class SettingsForm : Form
     private const int DwmwcRound = 2;
 
     private readonly Func<TraySettings, bool> _applySettings;
+    private readonly Dictionary<(float Size, FontStyle Style), Font> _fonts = [];
+    private readonly Font _windowFont;
     private readonly Label _titleLabel;
     private readonly Label _subtitleLabel;
     private readonly Label _generalHeading;
@@ -41,7 +43,8 @@ internal sealed class SettingsForm : Form
         AutoScaleMode = AutoScaleMode.Dpi;
         ClientSize = new Size(600, 550);
         DoubleBuffered = true;
-        Font = new Font("Segoe UI Variable Text", 9.5F, FontStyle.Regular, GraphicsUnit.Point);
+        _windowFont = new Font("Segoe UI Variable Text", 9.5F, FontStyle.Regular, GraphicsUnit.Point);
+        Font = _windowFont;
         FormBorderStyle = FormBorderStyle.FixedDialog;
         Icon = _windowIcon;
         MaximizeBox = false;
@@ -56,7 +59,7 @@ internal sealed class SettingsForm : Form
         {
             AutoSize = true,
             Dock = DockStyle.Fill,
-            Font = new Font(Font.FontFamily, 10F),
+            Font = GetUiFont(10F, FontStyle.Regular),
             Margin = Padding.Empty,
             TextAlign = ContentAlignment.MiddleLeft,
         };
@@ -275,7 +278,7 @@ internal sealed class SettingsForm : Form
         AutoEllipsis = true,
         BackColor = Color.Transparent,
         Dock = DockStyle.Fill,
-        Font = new Font(Font.FontFamily, size, style, GraphicsUnit.Point),
+        Font = GetUiFont(size, style),
         Margin = Padding.Empty,
         TextAlign = ContentAlignment.MiddleLeft,
     };
@@ -293,6 +296,17 @@ internal sealed class SettingsForm : Form
         {
             _updatingControls = false;
         }
+    }
+
+    private Font GetUiFont(float size, FontStyle style)
+    {
+        if (!_fonts.TryGetValue((size, style), out var font))
+        {
+            font = new Font(Font.FontFamily, size, style, GraphicsUnit.Point);
+            _fonts.Add((size, style), font);
+        }
+
+        return font;
     }
 
     private void StartWithWindowsCheckedChanged(object? sender, EventArgs eventArgs)
@@ -420,6 +434,16 @@ internal sealed class SettingsForm : Form
         }
 
         base.Dispose(disposing);
+        if (disposing)
+        {
+            foreach (var font in _fonts.Values)
+            {
+                font.Dispose();
+            }
+
+            _fonts.Clear();
+            _windowFont.Dispose();
+        }
     }
 
     [DllImport("dwmapi.dll")]

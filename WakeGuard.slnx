@@ -3,7 +3,6 @@
     <Project Path="src/WakeGuard.Contracts/WakeGuard.Contracts.csproj" />
     <Project Path="src/WakeGuard.Core/WakeGuard.Core.csproj" />
     <Project Path="src/WakeGuard.Service/WakeGuard.Service.csproj" />
-    <Project Path="src/WakeGuard.Tray/WakeGuard.Tray.csproj" />
     <Project Path="src/WakeGuard.Windows/WakeGuard.Windows.csproj" />
   </Folder>
   <Folder Name="/tests/">

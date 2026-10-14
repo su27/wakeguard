@@ -19,8 +19,9 @@ the interactive session is locked.
 - Three clear modes: **System default**, **Keep awake**, and **Keep screen on**.
 - Optional durations: unlimited, 30 minutes, 1 hour, 2 hours, or 4 hours.
 - One-click lock and screen-saver actions that do not change the active mode or timer.
-- A compact Windows 11-style left-click control panel.
-- A native right-click tray menu containing only **Settings** and **Exit**.
+- A compact Tauri control panel opened by either tray-icon mouse button.
+- Settings and Exit icon buttons in the panel header.
+- A native Rust tray host; WebView2 windows are created on demand and destroyed after 15 seconds hidden.
 - Per-user startup preference and a Chinese/English interface.
 - Reliable locked-session behavior through a `LocalService` Windows service.
 - Demand-start service activation through a native named-pipe service trigger.
@@ -66,9 +67,9 @@ These actions do not change the selected wake mode or duration. Starting a scree
 saver also does not automatically lock Windows; whether credentials are required
 on resume depends on the Windows screen-saver settings.
 
-### Right-click: application menu
+### Settings and exit
 
-Right-click the tray icon to open a native Windows menu:
+Left-click or right-click the tray icon to open the same control panel. Its top-right icons provide:
 
 - **Settings...** opens the settings window.
 - **Exit** releases this user's active request and closes the tray application.
@@ -92,11 +93,12 @@ installation defaults to starting WakeGuard when the current user signs in.
 2. Run the MSI and approve the administrator prompt. Elevation is required only to
    install the service and write files under `Program Files`.
 3. Start **WakeGuard** from the Start menu.
-4. Left-click its notification-area icon to select a wake mode. Right-click it to
-   open Settings or exit.
+4. Click its notification-area icon to select a wake mode, open Settings, or exit.
 
-Release binaries are self-contained; the .NET runtime does not need to be installed
-separately.
+The tray is a native Rust/Tauri application and the service uses .NET Native AOT;
+neither requires a separately installed .NET runtime. The interface requires the
+Microsoft Edge WebView2 Evergreen Runtime, normally present on current Windows
+installations. The MSI checks for it and provides a download link if missing.
 
 > WakeGuard is not currently Authenticode-signed. Windows may therefore show an
 > "Unknown publisher" warning. Always download the installer from this repository's
@@ -271,6 +273,8 @@ Logging failures do not interrupt or change an active Power Request.
 
 - Windows 10 or Windows 11 x64
 - .NET 10 SDK `10.0.302` (the SDK feature band is pinned in [global.json](global.json))
+- Rust stable with the MSVC toolchain and Visual Studio C++ build tools
+- Node.js (used to check the frontend JavaScript) and WebView2 Runtime
 - Network access for restoring .NET and WiX Toolset 5 packages
 
 ### Build and test
@@ -290,9 +294,9 @@ Run the complete release build with:
 .\scripts\Build.ps1
 ```
 
-The script regenerates icon assets, runs all automated tests, publishes the
-self-contained tray executable and Native AOT service, and builds a high-compression
-WiX MSI.
+The script regenerates icon assets, runs the .NET and Rust tests, checks the frontend
+JavaScript, builds the native Tauri tray and Native AOT service, and creates a
+high-compression WiX MSI.
 
 Build output is written to:
 
@@ -302,8 +306,8 @@ artifacts\publish\win-x64\Service\
 artifacts\installer\WakeGuard-<version>-win-x64.msi
 ```
 
-The product version has a single source of truth in
-[Directory.Build.props](Directory.Build.props). See [docs/testing.md](docs/testing.md)
+Keep the product version synchronized in `Directory.Build.props`, the tray's
+`Cargo.toml` / `Cargo.lock`, and `tauri.conf.json`. See [docs/testing.md](docs/testing.md)
 for the automated and manual validation matrix.
 
 ### Repository layout
@@ -316,7 +320,8 @@ scripts/Build.ps1               Full release build entry point
 src/WakeGuard.Contracts/        Versioned IPC messages and bounded framing
 src/WakeGuard.Core/             Platform-independent lease state machine
 src/WakeGuard.Service/          LocalService Windows service
-src/WakeGuard.Tray/             WinForms tray application and settings UI
+src/WakeGuard.Tauri/            Rust tray host and on-demand HTML/CSS interface
+src/WakeGuard.Tray/             Legacy WinForms sources and shared icon assets
 src/WakeGuard.Windows/          Power Request, named-pipe, and Windows API adapters
 tests/                          Core and Windows integration tests
 tools/WakeGuard.IconGenerator/  Multi-size PNG and ICO generator

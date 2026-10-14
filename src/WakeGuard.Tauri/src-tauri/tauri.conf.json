@@ -1,0 +1,15 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "WakeGuard",
+  "version": "0.2.1",
+  "identifier": "com.wakeguard.tray",
+  "build": { "frontendDist": "../ui", "devUrl": "http://localhost:1420" },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [],
+    "security": {
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' asset: http://asset.localhost; connect-src ipc: http://ipc.localhost; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'"
+    }
+  },
+  "bundle": { "active": false, "icon": ["../../WakeGuard.Tray/Assets/WakeGuard.ico"] }
+}
