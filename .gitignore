@@ -9,3 +9,6 @@ TestResults/
 *.suo
 *.DotSettings.user
 *.log
+**/target/
+**/node_modules/
+src/WakeGuard.Tauri/src-tauri/gen/

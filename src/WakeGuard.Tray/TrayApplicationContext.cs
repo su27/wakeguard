@@ -9,9 +9,10 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private readonly WakeGuardClient _client = new();
     private readonly NotifyIcon _notifyIcon;
     private readonly Timer _heartbeatTimer;
+    private readonly Timer _windowCleanupTimer;
     private readonly SemaphoreSlim _requestLock = new(1, 1);
     private readonly ShutdownWindow _shutdownWindow;
-    private readonly TrayPopupForm _popup;
+    private TrayPopupForm? _popup;
     private TraySettings _settings;
     private SettingsForm? _settingsForm;
     private WindowsDisplayRequest? _displayRequest;
@@ -43,13 +44,8 @@ internal sealed class TrayApplicationContext : ApplicationContext
         };
         _heartbeatTimer.Tick += HeartbeatTimerTick;
         _shutdownWindow = new ShutdownWindow(() => ExitAsync(confirmOnFailure: false));
-        _popup = new TrayPopupForm(new TrayPopupForm.Actions(
-            SetModeFromPanelAsync,
-            SetDurationFromPanelAsync,
-            LockAsync,
-            StartScreenSaverAsync,
-            ShowSettings,
-            () => ExitAsync(confirmOnFailure: true)));
+        _windowCleanupTimer = new Timer { Interval = 15_000 };
+        _windowCleanupTimer.Tick += (_, _) => ReleaseHiddenWindows();
         _notifyIcon.MouseUp += NotifyIconMouseUp;
         _notifyIcon.Visible = true;
         if (StartupRegistration.IsInstalledExecutable)
@@ -82,6 +78,18 @@ internal sealed class TrayApplicationContext : ApplicationContext
 
     private void ShowControlPanel()
     {
+        if (_popup is null)
+        {
+            _popup = new TrayPopupForm(new TrayPopupForm.Actions(
+                SetModeFromPanelAsync,
+                SetDurationFromPanelAsync,
+                LockAsync,
+                StartScreenSaverAsync,
+                ShowSettings,
+                () => ExitAsync(confirmOnFailure: true)));
+            _popup.VisibleChanged += WindowVisibleChanged;
+        }
+
         ApplyVisualState();
         _ = RefreshOrRenewAsync(showError: false);
         _popup.ShowAtCursor(CreatePopupState());
@@ -89,9 +97,50 @@ internal sealed class TrayApplicationContext : ApplicationContext
 
     private void ShowSettings()
     {
-        _popup.Hide();
-        _settingsForm ??= new SettingsForm(_settings, ApplySettings);
+        _popup?.Hide();
+        if (_settingsForm is null)
+        {
+            _settingsForm = new SettingsForm(_settings, ApplySettings);
+            _settingsForm.VisibleChanged += WindowVisibleChanged;
+        }
         _settingsForm.ShowSettings(_settings);
+    }
+
+    private void WindowVisibleChanged(object? sender, EventArgs eventArgs)
+    {
+        // Restart the grace period after each transition; never dispose a form
+        // inside one of its own click, hide, or deactivation handlers.
+        _windowCleanupTimer.Stop();
+        if (!_exiting && (_popup is { Visible: false } || _settingsForm is { Visible: false }))
+        {
+            _windowCleanupTimer.Start();
+        }
+    }
+
+    private void ReleaseHiddenWindows()
+    {
+        _windowCleanupTimer.Stop();
+        if (_popup is { Visible: false, HasPendingCommand: false })
+        {
+            var popup = _popup;
+            _popup = null;
+            popup.VisibleChanged -= WindowVisibleChanged;
+            popup.Dispose();
+        }
+
+        if (_settingsForm is { Visible: false })
+        {
+            var settingsForm = _settingsForm;
+            _settingsForm = null;
+            settingsForm.VisibleChanged -= WindowVisibleChanged;
+            settingsForm.Dispose();
+        }
+
+        if (_popup is { Visible: false })
+        {
+            // An in-flight operation still owns the panel until its continuation ends.
+            _windowCleanupTimer.Start();
+        }
     }
 
     private bool ApplySettings(TraySettings settings)
@@ -136,7 +185,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
 
         _settings = settings;
         UiText.Use(settings.Language);
-        _popup.ApplyLocalization();
+        _popup?.ApplyLocalization();
         ApplyVisualState();
         return true;
     }
@@ -286,7 +335,8 @@ internal sealed class TrayApplicationContext : ApplicationContext
         }
 
         _exiting = true;
-        _popup.Hide();
+        _windowCleanupTimer.Stop();
+        _popup?.Hide();
         _settingsForm?.Hide();
         _heartbeatTimer.Stop();
         await _requestLock.WaitAsync();
@@ -419,7 +469,10 @@ internal sealed class TrayApplicationContext : ApplicationContext
 
         _notifyIcon.Text = TruncateTooltip($"WakeGuard - {_statusText}");
         SetIcon(iconState);
-        _popup.UpdateState(CreatePopupState());
+        if (_popup is { Visible: true })
+        {
+            _popup.UpdateState(CreatePopupState());
+        }
     }
 
     private TrayPopupForm.State CreatePopupState() =>
@@ -469,7 +522,8 @@ internal sealed class TrayApplicationContext : ApplicationContext
         if (disposing)
         {
             _heartbeatTimer.Dispose();
-            _popup.Dispose();
+            _windowCleanupTimer.Dispose();
+            _popup?.Dispose();
             _settingsForm?.Dispose();
             _shutdownWindow.Dispose();
             _displayRequest?.Dispose();

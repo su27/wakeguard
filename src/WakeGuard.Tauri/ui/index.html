@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>WakeGuard</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <main id="panel" hidden>
+    <header class="panel-header">
+      <img id="mode-icon" class="app-mark" src="icons/inactive.png" alt=""><span id="status" role="status"></span>
+      <button id="settings" class="icon-button" aria-label="Settings" title="Settings"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m10 3-.6 2.4-1.7 1-2.4-.7-2 3.5 1.8 1.7v2.2l-1.8 1.7 2 3.5 2.4-.7 1.7 1L10 21h4l.6-2.4 1.7-1 2.4.7 2-3.5-1.8-1.7v-2.2l1.8-1.7-2-3.5-2.4.7-1.7-1L14 3Z"/><circle cx="12" cy="12" r="3"/></svg></button>
+      <button id="exit" class="icon-button" aria-label="Exit WakeGuard" title="Exit WakeGuard"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 17v3H4V4h6v3M9 12h12m-4-4 4 4-4 4"/></svg></button>
+    </header>
+    <section><h2 data-text="modeHeading"></h2><div class="buttons modes">
+      <button data-mode="Inactive" data-text="inactive"></button><button data-mode="KeepAwake" data-text="keepAwake"></button><button data-mode="KeepAwakeAndDisplayOn" data-text="displayOn"></button>
+    </div></section>
+    <section><h2 data-text="durationHeading"></h2><div class="buttons durations">
+      <button data-minutes="" data-text="unlimited"></button><button data-minutes="30" data-text="minutes30"></button><button data-minutes="60" data-text="hour1"></button><button data-minutes="120" data-text="hours2"></button><button data-minutes="240" data-text="hours4"></button>
+    </div></section>
+    <section><h2><span data-text="actionsHeading"></span><button id="help" class="help-button" aria-label="Help">?</button></h2><div class="buttons actions">
+      <button id="lock" data-text="lock"></button><button id="screensaver" data-text="screensaver"></button>
+    </div></section>
+  </main>
+  <main id="preferences" hidden>
+    <header class="settings-header"><div><h1 data-text="settingsTitle"></h1><p data-text="settingsSubtitle"></p></div><button id="close-settings" class="icon-button" aria-label="Close">×</button></header>
+    <h2 data-text="general"></h2>
+    <section class="card"><label class="startup"><input id="startup" type="checkbox"><span data-text="startup"></span></label><p data-text="startupDescription"></p>
+      <div class="language-row"><label for="language" data-text="language"></label><select id="language"><option value="0">中文</option><option value="1">English</option></select></div><p data-text="languageDescription"></p>
+    </section>
+    <h2 data-text="about"></h2><section class="card"><strong id="version"></strong><p data-text="aboutDescription"></p><small>WakeGuard contributors · Tauri</small></section>
+    <footer><button id="done" data-text="close"></button></footer>
+  </main>
+  <div id="notice" role="alert" hidden><span id="notice-text"></span><button id="dismiss-notice" aria-label="Close">×</button><button id="force-exit" hidden data-text="exitAnyway"></button></div>
+</body>
+</html>

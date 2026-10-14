@@ -24,7 +24,7 @@ flowchart LR
     C --> P
 ```
 
-- `WakeGuard.Tray` owns interactive-session operations and never elevates.
+- `src/WakeGuard.Tauri` builds the native Rust/Tauri `WakeGuard.Tray.exe`, owns interactive-session operations, and never elevates. The old WinForms project is retained as reference and for shared icon assets, but is excluded from the solution and installer build.
 - `WakeGuard.Service` owns the machine-wide Power Request and runs as `LocalService`.
 - `WakeGuard.Core` contains the platform-independent lease state machine.
 - `WakeGuard.Windows` contains Windows API and pipe-security adapters.
@@ -59,4 +59,10 @@ The pipe grants full control to `LocalSystem` and `LocalService`, read/write to 
 
 ## Packaging
 
-Release builds target .NET 10 LTS and publish self-contained `win-x64` executables. The background service uses Native AOT to minimize its resident runtime footprint. The final MSI installs both executables per machine, registers the service under `LocalService`, and creates required ACLs. The non-elevated tray manages startup for the current user according to its saved preference. Binaries are designed for Authenticode signing when a certificate is available.
+Release builds produce a Rust/Tauri `win-x64` tray executable with embedded HTML/CSS/JavaScript and a .NET 10 Native AOT service. Neither executable carries a managed .NET desktop runtime. The existing WiX MSI installs both executables per machine, registers the service under `LocalService`, and creates required ACLs. The MSI checks for WebView2 Evergreen Runtime instead of bundling a private browser runtime. The non-elevated tray manages startup for the current user according to its saved preference. Binaries are designed for Authenticode signing when a certificate is available.
+
+## On-demand interface
+
+The Tauri application starts with no WebView windows. Rust owns the tray icon, the 20-second lease heartbeat, display power-request handle, settings, and bounded asynchronous pipe client. Both tray mouse buttons open the same local control panel. The frontend is static, has no npm runtime dependencies, and receives only explicit application commands and state events under a restrictive CSP.
+
+The frontend signals readiness after state, language, fonts, and its first layout are complete. Windows remain hidden until that signal. Hiding a panel starts a generation-checked 15-second cleanup; reopening it cancels that cleanup. Destroying WebViews never releases a wake lease, which belongs to the Rust host. A separate hidden Win32 shutdown window keeps MSI close, sign-out, and shutdown handling available even while no WebView exists. Settings retain the previous PascalCase JSON format and user registry startup entry.

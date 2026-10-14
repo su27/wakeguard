@@ -12,7 +12,6 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\WakeGuard.Service\WakeGuard.Service.csproj" />
-    <ProjectReference Include="..\..\src\WakeGuard.Tray\WakeGuard.Tray.csproj" />
     <ProjectReference Include="..\..\src\WakeGuard.Windows\WakeGuard.Windows.csproj" />
   </ItemGroup>
   <ItemGroup>

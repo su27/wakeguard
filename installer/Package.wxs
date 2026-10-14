@@ -14,6 +14,18 @@
 
     <Icon Id="WakeGuardIcon" SourceFile="$(var.SourceRoot)\src\WakeGuard.Tray\Assets\WakeGuard.ico" />
     <Property Id="ARPPRODUCTICON" Value="WakeGuardIcon" />
+    <Property Id="WEBVIEW2SYSTEM">
+      <RegistrySearch Id="WebView2SystemSearch" Root="HKLM"
+                      Key="SOFTWARE\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}"
+                      Name="pv" Type="raw" Bitness="always32" />
+    </Property>
+    <Property Id="WEBVIEW2USER">
+      <RegistrySearch Id="WebView2UserSearch" Root="HKCU"
+                      Key="SOFTWARE\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}"
+                      Name="pv" Type="raw" />
+    </Property>
+    <Launch Condition="Installed OR WEBVIEW2SYSTEM OR WEBVIEW2USER"
+            Message="WakeGuard requires Microsoft Edge WebView2 Runtime. Install it from https://go.microsoft.com/fwlink/p/?LinkId=2124703 then run this installer again. / 请先安装 Microsoft Edge WebView2 Runtime。" />
     <SetProperty Id="ARPINSTALLLOCATION" Value="[INSTALLFOLDER]" After="CostFinalize" Sequence="both" />
 
     <util:CloseApplication Id="CloseWakeGuardTray"

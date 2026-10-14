@@ -24,11 +24,13 @@ Core tests cover lease renewal, lease expiry, user-selected stop time, multiple-
 ## Tray interaction and settings
 
 1. Left-click the tray icon and confirm the awake control panel opens without showing a native menu.
-2. Right-click the tray icon and confirm the native menu contains only **Settings** and **Exit**.
+2. Right-click the tray icon and confirm the same control panel opens, with Settings and Exit icons in its header.
 3. Disable startup in Settings and confirm the current user's `HKCU\Software\Microsoft\Windows\CurrentVersion\Run\WakeGuard` value is absent; enable it and confirm it points to the installed tray executable.
 4. Switch between Chinese and English and confirm the control panel, tray menu, settings window, status text, and error prompts update without restarting.
 5. Close and restart the tray and confirm startup and language preferences persist.
 6. Confirm the About section reports the same version as the installed MSI.
+7. Close both panels, wait at least 15 seconds, then reopen them and confirm settings, mode, duration, and first-frame rendering remain correct. Repeat while a service request is in flight; the hidden panel must not be disposed until the request completes.
+8. Compare private bytes, private working set, and GDI/USER handles at startup, after opening both panels, and after the hidden-window grace period. Repeat several cycles and check for sustained growth; do not force garbage collection or trim the working set to lower the reported numbers.
 
 ## Power behavior
 

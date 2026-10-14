@@ -18,6 +18,8 @@ internal sealed class TrayPopupForm : Form
     private const int WsExToolWindow = 0x00000080;
 
     private readonly Actions _actions;
+    private readonly Dictionary<(float Size, FontStyle Style), Font> _fonts = [];
+    private readonly Font _windowFont;
     private readonly PictureBox _appIcon;
     private readonly Label _statusLabel;
     private readonly HeaderIconButton _settingsButton;
@@ -47,6 +49,8 @@ internal sealed class TrayPopupForm : Form
     private bool _showWakeCommandProgress;
     private string _wakeCommandProgressText = string.Empty;
 
+    internal bool HasPendingCommand => _wakeCommandPending;
+
     internal readonly record struct Actions(
         Func<WakeMode, Task> SetModeAsync,
         Func<TimeSpan?, Task> SetDurationAsync,
@@ -71,7 +75,8 @@ internal sealed class TrayPopupForm : Form
         BackColor = _palette.Background;
         ClientSize = new Size(620, 490);
         DoubleBuffered = true;
-        Font = new Font("Segoe UI Variable Text", 9.5F, FontStyle.Regular, GraphicsUnit.Point);
+        _windowFont = new Font("Segoe UI Variable Text", 9.5F, FontStyle.Regular, GraphicsUnit.Point);
+        Font = _windowFont;
         FormBorderStyle = FormBorderStyle.None;
         KeyPreview = true;
         MaximizeBox = false;
@@ -138,7 +143,7 @@ internal sealed class TrayPopupForm : Form
         _actionHelpButton = new HelpIconButton
         {
             Dock = DockStyle.Fill,
-            Font = new Font(Font.FontFamily, 6.5F, FontStyle.Bold),
+            Font = GetUiFont(6.5F, FontStyle.Bold),
             Margin = Padding.Empty,
         };
         _actionHelpTip = new ToolTip
@@ -336,7 +341,7 @@ internal sealed class TrayPopupForm : Form
             AutoSize = false,
             BackColor = Color.Transparent,
             Dock = DockStyle.Fill,
-            Font = new Font(Font.FontFamily, fontSize, fontStyle, GraphicsUnit.Point),
+            Font = GetUiFont(fontSize, fontStyle),
             Margin = Padding.Empty,
             Text = text,
             TextAlign = ContentAlignment.MiddleLeft,
@@ -347,7 +352,7 @@ internal sealed class TrayPopupForm : Form
         var button = new PopupButton
         {
             Dock = DockStyle.Fill,
-            Font = new Font(Font.FontFamily, 9F, FontStyle.Regular, GraphicsUnit.Point),
+            Font = GetUiFont(9F, FontStyle.Regular),
             Text = text,
         };
         button.ApplyPalette(_palette);
@@ -363,6 +368,17 @@ internal sealed class TrayPopupForm : Form
         };
         button.ApplyPalette(_palette);
         return button;
+    }
+
+    private Font GetUiFont(float size, FontStyle style)
+    {
+        if (!_fonts.TryGetValue((size, style), out var font))
+        {
+            font = new Font(Font.FontFamily, size, style, GraphicsUnit.Point);
+            _fonts.Add((size, style), font);
+        }
+
+        return font;
     }
 
     private void AddDurationButton(string text, TimeSpan duration)
@@ -744,6 +760,16 @@ internal sealed class TrayPopupForm : Form
         }
 
         base.Dispose(disposing);
+        if (disposing)
+        {
+            foreach (var font in _fonts.Values)
+            {
+                font.Dispose();
+            }
+
+            _fonts.Clear();
+            _windowFont.Dispose();
+        }
     }
 
     private static int ToColorRef(Color color) => color.R | (color.G << 8) | (color.B << 16);
